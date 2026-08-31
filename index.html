@@ -16,7 +16,7 @@
     --border-soft: #212B24;
     --text: #E7ECE5;
     --text-muted: #8FA095;
-    --text-dim: #5E6E64;
+    --text-dim: #6B7C71;
     --amber: #D99A3E;
     --amber-dim: rgba(217,154,62,0.16);
     --teal: #4FA8A2;
@@ -38,31 +38,61 @@
   ::-webkit-scrollbar-track{ background:transparent; }
   ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:4px; }
 
+  /* Visible keyboard focus everywhere an interactive element got a custom look */
+  a:focus-visible, button:focus-visible, input:focus-visible,
+  .cam-row:focus-visible, .alert-item:focus-visible, .node:focus-visible{
+    outline: 2px solid var(--teal); outline-offset: 2px; border-radius:2px;
+  }
+  .cam-row, .alert-item{ outline-offset:-2px; }
+
+  .visually-hidden{
+    position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+  }
+
   /* ---------------- Shell ---------------- */
   .app{ display:flex; flex-direction:column; height:100vh; }
 
   header{
     display:flex; align-items:center; justify-content:space-between;
     height:56px; padding:0 20px; border-bottom:1px solid var(--border-soft);
-    flex-shrink:0; background:var(--bg-soft);
+    flex-shrink:0; background:var(--bg-soft); gap:12px;
   }
-  .brand{ display:flex; align-items:center; gap:10px; }
-  .brand-name{ font-size:15.5px; }
+  .brand{ display:flex; align-items:center; gap:10px; min-width:0; }
+  .brand-name{ font-size:15.5px; white-space:nowrap; }
   .status-strip{ display:flex; align-items:center; gap:22px; }
-  .status-item{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text-muted); }
+  .status-item{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text-muted); white-space:nowrap; }
   .status-item .dot{ width:6px; height:6px; border-radius:50%; }
   .clock{ font-family:'IBM Plex Mono'; font-size:12.5px; color:var(--text-dim); min-width:150px; text-align:right; }
 
   .body{ flex:1; display:grid; grid-template-columns: 280px 1fr 340px; min-height:0; }
   @media (max-width: 1080px){ .body{ grid-template-columns: 240px 1fr 300px; } }
 
+  /* Narrow / mobile: stack panels and allow the page to scroll instead of clipping content */
+  @media (max-width: 860px){
+    body{ height:auto; min-height:100vh; overflow-y:auto; overflow-x:hidden; }
+    .app{ height:auto; min-height:100vh; }
+    header{ height:auto; flex-wrap:wrap; padding:10px 16px; row-gap:8px; }
+    .status-strip{ flex-wrap:wrap; gap:14px; width:100%; justify-content:space-between; }
+    .clock{ text-align:left; min-width:0; }
+    .body{ grid-template-columns:1fr; grid-auto-rows:auto; }
+    .panel{ border-right:none; border-bottom:1px solid var(--border-soft); }
+    .panel-body{ max-height:280px; }
+    .map-wrap{ height:320px; flex:none; }
+    #feedCanvas{ height:320px; }
+    .detail-strip{ flex-wrap:wrap; row-gap:10px; }
+    .d-actions{ margin-left:0; width:100%; }
+  }
+
   /* ---------------- Panels ---------------- */
   .panel{ border-right:1px solid var(--border-soft); display:flex; flex-direction:column; min-height:0; }
   .panel:last-child{ border-right:none; }
   .panel-head{
     padding:16px 18px 12px; border-bottom:1px solid var(--border-soft); flex-shrink:0;
+    display:flex; align-items:baseline; justify-content:space-between; gap:8px;
   }
   .panel-head h2{ font-size:13px; text-transform:none; color:var(--text-muted); font-weight:500; letter-spacing:0.02em; }
+  .panel-head .sub{ font-size:11px; color:var(--text-dim); }
   .panel-body{ flex:1; overflow-y:auto; padding: 10px 0; }
 
   /* ---------------- Camera list ---------------- */
@@ -71,16 +101,27 @@
   }
   .search-box input{
     width:100%; background:var(--surface); border:1px solid var(--border);
-    border-radius:3px; padding:8px 10px; color:var(--text); font-size:13px;
+    border-radius:3px; padding:8px 30px 8px 10px; color:var(--text); font-size:13px;
     font-family:inherit;
   }
   .search-box input:focus{ outline:none; border-color:var(--teal); }
+  .search-clear{
+    position:absolute; right:4px; top:50%; transform:translateY(-50%);
+    width:24px; height:24px; display:none; align-items:center; justify-content:center;
+    background:none; border:none; color:var(--text-dim); font-size:15px; border-radius:3px;
+  }
+  .search-clear:hover{ color:var(--text); background:var(--surface-2); }
+  .search-clear.show{ display:flex; }
+
   .filter-row{ display:flex; gap:6px; margin:10px 18px 4px; flex-wrap:wrap; }
   .chip{
     font-size:11.5px; padding:4px 9px; border-radius:12px; border:1px solid var(--border);
     color:var(--text-dim); background:transparent; transition:all .12s ease;
+    display:inline-flex; align-items:center; gap:5px;
   }
+  .chip .count{ color:var(--text-dim); font-family:'IBM Plex Mono'; font-size:10.5px; }
   .chip.active{ border-color:var(--teal); color:var(--teal); background:var(--teal-dim); }
+  .chip.active .count{ color:var(--teal); }
 
   .cam-row{
     display:flex; align-items:center; gap:10px; padding:9px 18px;
@@ -96,13 +137,14 @@
   .cam-name{ font-size:13.5px; color:var(--text); }
   .cam-sector{ font-size:11px; color:var(--text-dim); }
   .cam-empty{ padding:20px 18px; color:var(--text-dim); font-size:13px; }
+  .cam-empty button{ color:var(--teal); background:none; border:none; padding:0; font-size:13px; text-decoration:underline; }
 
   /* ---------------- Map ---------------- */
   .map-wrap{ flex:1; position:relative; background:var(--bg); min-height:0; }
   .map-wrap svg{ width:100%; height:100%; display:block; }
   .map-legend{
     position:absolute; bottom:16px; left:18px; display:flex; gap:16px;
-    font-size:11.5px; color:var(--text-dim);
+    font-size:11.5px; color:var(--text-dim); flex-wrap:wrap;
   }
   .map-legend span{ display:inline-flex; align-items:center; gap:6px; }
   .legend-dot{ width:7px; height:7px; border-radius:50%; display:inline-block; }
@@ -115,7 +157,6 @@
   }
   .tbtn:hover{ border-color:var(--text-dim); color:var(--text); }
   .tbtn.active{ border-color:var(--teal); color:var(--teal); }
-  .view-toggle{ display:flex; gap:6px; padding-right:8px; margin-right:8px; border-right:1px solid var(--border); }
 
   #feedCanvas{ width:100%; height:100%; display:block; background:#0B100D; }
 
@@ -146,7 +187,7 @@
   .d-field .val.mono{ font-size:12.5px; }
   .pill{ font-size:11px; padding:3px 9px; border-radius:10px; display:inline-block; }
   .pill.online{ background:var(--teal-dim); color:var(--teal); }
-  .pill.offline{ background:rgba(94,110,100,0.18); color:var(--text-dim); }
+  .pill.offline{ background:rgba(107,124,113,0.18); color:var(--text-dim); }
   .pill.alert{ background:var(--amber-dim); color:var(--amber); }
   .d-actions{ margin-left:auto; display:flex; gap:8px; }
   .btn{
@@ -157,20 +198,27 @@
   .btn.primary{ background:var(--amber); border-color:var(--amber); color:#191309; font-weight:500; }
   .btn.primary:hover{ background:#e6ab52; }
   .btn:disabled{ opacity:0.4; cursor:not-allowed; }
+  .btn.small{ padding:4px 9px; font-size:11px; }
 
   /* ---------------- Alert feed ---------------- */
-  .feed-stats{ display:flex; gap:14px; padding:0 18px 12px; }
+  .feed-stats{ display:flex; gap:14px; padding:0 18px 10px; }
   .fstat{ flex:1; }
   .fstat b{ display:block; font-family:'Space Grotesk'; font-size:19px; }
   .fstat span{ font-size:10.5px; color:var(--text-dim); }
 
+  .feed-legend{ display:flex; gap:12px; padding:0 18px 12px; font-size:11px; color:var(--text-dim); flex-wrap:wrap; }
+  .feed-legend span{ display:inline-flex; align-items:center; gap:5px; }
+
   .alert-item{
     padding:12px 18px; border-bottom:1px solid var(--border-soft);
-    cursor:pointer; transition:background .12s ease;
+    cursor:pointer; transition:background .12s ease; position:relative;
   }
   .alert-item:hover{ background:var(--surface); }
   .alert-item.selected{ background:var(--surface-2); }
-  .alert-item.ack{ opacity:0.45; }
+  .alert-item.ack{ opacity:0.5; }
+  .alert-item.is-new{ animation:newAlertFlash 1.6s ease-out; }
+  @keyframes newAlertFlash{ 0%{ background:var(--teal-dim); } 100%{ background:transparent; } }
+  @media (prefers-reduced-motion: reduce){ .alert-item.is-new{ animation:none; } }
   .alert-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .sev-badge{ font-size:10px; padding:2px 7px; border-radius:3px; font-weight:500; letter-spacing:0.02em; }
   .sev-badge.high{ background:var(--red-dim); color:var(--red); }
@@ -183,6 +231,7 @@
   .score-bar{ flex:1; height:3px; background:var(--border-soft); border-radius:2px; overflow:hidden; }
   .score-fill{ height:100%; border-radius:2px; }
   .score-num{ font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--text-dim); width:24px; text-align:right; }
+  .alert-actions{ display:flex; justify-content:flex-end; margin-top:8px; }
 
   .empty-feed{ padding:24px 18px; color:var(--text-dim); font-size:13px; text-align:center; }
 
@@ -195,8 +244,8 @@
     padding:16px 18px; border-bottom:1px solid var(--border-soft);
     display:flex; align-items:center; gap:10px; flex-shrink:0;
   }
-  .back-btn{ background:none; border:none; color:var(--text-muted); font-size:18px; padding:0 4px; line-height:1; }
-  .back-btn:hover{ color:var(--text); }
+  .back-btn{ background:none; border:none; color:var(--text-muted); font-size:18px; padding:2px 6px; line-height:1; border-radius:3px; }
+  .back-btn:hover{ color:var(--text); background:var(--surface); }
   .case-title{ font-size:14px; }
   .case-body{ flex:1; overflow-y:auto; padding:16px 18px; }
   .case-section{ margin-bottom:22px; }
@@ -221,15 +270,15 @@
 <div class="app">
   <header>
     <div class="brand">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M12 2 L21 6.5 V12.5 C21 17.5 17.2 21.2 12 22.5 C6.8 21.2 3 17.5 3 12.5 V6.5 Z" stroke="#D99A3E" stroke-width="1.4"/>
         <circle cx="12" cy="12" r="2.4" fill="#4FA8A2"/>
       </svg>
       <span class="brand-name">Sentinel Line <span style="color:var(--text-dim); font-weight:400; font-size:12.5px;">— prototype console</span></span>
     </div>
     <div class="status-strip">
-      <div class="status-item"><span class="dot" style="background:var(--teal);"></span><span id="onlineCount">—</span> cameras online</div>
-      <div class="status-item"><span class="dot" style="background:var(--amber);"></span><span id="openAlertCount">—</span> open alerts</div>
+      <div class="status-item"><span class="dot" style="background:var(--teal);" aria-hidden="true"></span><span id="onlineCount">—</span> cameras online</div>
+      <div class="status-item"><span class="dot" style="background:var(--amber);" aria-hidden="true"></span><span id="openAlertCount">—</span> open alerts</div>
       <div class="clock mono" id="clock">—</div>
     </div>
   </header>
@@ -239,15 +288,17 @@
     <div class="panel" id="cameraPanel">
       <div class="panel-head"><h2>Cameras</h2></div>
       <div class="search-box">
-        <input type="text" id="camSearch" placeholder="Search by name or sector…">
+        <label class="visually-hidden" for="camSearch">Search cameras by name or sector</label>
+        <input type="text" id="camSearch" placeholder="Search by name or sector…" autocomplete="off">
+        <button class="search-clear" id="camSearchClear" type="button" aria-label="Clear search">&times;</button>
       </div>
-      <div class="filter-row" id="camFilters">
-        <button class="chip active" data-filter="all">All</button>
-        <button class="chip" data-filter="online">Online</button>
-        <button class="chip" data-filter="alert">Alert</button>
-        <button class="chip" data-filter="offline">Offline</button>
+      <div class="filter-row" id="camFilters" role="group" aria-label="Filter cameras by status">
+        <button class="chip active" data-filter="all" aria-pressed="true">All <span class="count" id="countAll"></span></button>
+        <button class="chip" data-filter="online" aria-pressed="false">Online <span class="count" id="countOnline"></span></button>
+        <button class="chip" data-filter="alert" aria-pressed="false">Alert <span class="count" id="countAlert"></span></button>
+        <button class="chip" data-filter="offline" aria-pressed="false">Offline <span class="count" id="countOffline"></span></button>
       </div>
-      <div class="panel-body" id="cameraList"></div>
+      <div class="panel-body" id="cameraList" role="listbox" aria-label="Camera list"></div>
     </div>
 
     <!-- CENTER: map + detail strip -->
@@ -255,9 +306,9 @@
       <div class="map-wrap">
         <div class="map-toolbar">
           <button class="tbtn" id="backToMapBtn" style="display:none;">&larr; Back to map</button>
-          <button class="tbtn active" data-fence="1" id="fenceToggle">Virtual fence: on</button>
+          <button class="tbtn active" data-fence="1" id="fenceToggle" aria-pressed="true">Virtual fence: on</button>
         </div>
-        <svg id="mapSvg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg"></svg>
+        <svg id="mapSvg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Perimeter map with camera positions"></svg>
         <canvas id="feedCanvas" width="700" height="500" style="display:none;"></canvas>
         <div class="map-legend">
           <span><span class="legend-dot" style="background:var(--teal);"></span>Online</span>
@@ -278,6 +329,11 @@
         <div class="fstat"><b id="statOpen">0</b><span>Unacknowledged</span></div>
         <div class="fstat"><b id="statAvg">0</b><span>Avg. threat score</span></div>
       </div>
+      <div class="feed-legend">
+        <span><span class="legend-dot" style="background:var(--red);"></span>High</span>
+        <span><span class="legend-dot" style="background:var(--amber);"></span>Medium</span>
+        <span><span class="legend-dot" style="background:var(--teal);"></span>Low</span>
+      </div>
       <div class="panel-body" id="alertFeed"></div>
 
       <div class="case-panel" id="casePanel" style="display:none;"></div>
@@ -285,7 +341,7 @@
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 (function(){
@@ -326,7 +382,8 @@
     fenceOn: true,
     mapView: "map",   // "map" | "feed"
     alerts: [],       // {id, cameraId, type, severity, score, ts, acknowledged}
-    nextAlertId: 1
+    nextAlertId: 1,
+    lastNewAlertId: null
   };
 
   /* ============ HELPERS ============ */
@@ -339,6 +396,7 @@
   function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
   function pick(arr){ return arr[randInt(0,arr.length-1)]; }
   function byId(id){ return document.getElementById(id); }
+  function scoreColor(score){ return score >= 70 ? "var(--red)" : score >= 45 ? "var(--amber)" : "var(--teal)"; }
 
   function cameraById(id){
     for (var i=0;i<cameras.length;i++){ if (cameras[i].id===id) return cameras[i]; }
@@ -353,6 +411,14 @@
     showToast._h = setTimeout(function(){ t.classList.remove("show"); }, 2200);
   }
 
+  /* Enter/Space activates elements that behave like buttons but aren't <button> */
+  function onActivateKey(e, fn){
+    if (e.key === "Enter" || e.key === " " || e.key === "Spacebar"){
+      e.preventDefault();
+      fn();
+    }
+  }
+
   /* ============ ALERT GENERATION ============ */
 
   function generateAlert(){
@@ -361,7 +427,7 @@
     var cam = pick(onlineCams);
     var tmpl = pick(alertTemplates);
     var score = randInt(tmpl.scoreRange[0], tmpl.scoreRange[1]);
-    var alert = {
+    var alertObj = {
       id: "A" + (state.nextAlertId++),
       cameraId: cam.id,
       type: tmpl.type,
@@ -370,7 +436,7 @@
       ts: new Date(),
       acknowledged: false
     };
-    state.alerts.unshift(alert);
+    state.alerts.unshift(alertObj);
     if (state.alerts.length > 60) state.alerts.pop();
 
     // briefly flag the camera as "alert" status, then revert after a while
@@ -379,9 +445,9 @@
 
     // record and save a short evidence clip for this event — retained on the
     // alert/case regardless of whether it's later acknowledged
-    alert.evidence = captureEvidenceClip(cam.id, alert.ts);
+    alertObj.evidence = captureEvidenceClip(cam.id, alertObj.ts);
 
-    return alert;
+    return alertObj;
   }
 
   function revertExpiredCameraAlerts(){
@@ -423,7 +489,7 @@
 
     if (!cam){
       ctx.fillStyle = "#0B100D"; ctx.fillRect(0,0,w,h);
-      ctx.fillStyle = "#5E6E64"; ctx.font = "13px 'IBM Plex Mono', monospace";
+      ctx.fillStyle = "#6B7C71"; ctx.font = "13px 'IBM Plex Mono', monospace";
       ctx.textAlign = "center";
       ctx.fillText("SELECT A CAMERA TO VIEW ITS FEED", w/2, h/2);
       ctx.textAlign = "left";
@@ -439,7 +505,7 @@
         ctx.fillStyle = "rgba(200,200,200,"+(rand()*0.14)+")";
         ctx.fillRect(rand()*w, rand()*h, 2, 2);
       }
-      ctx.fillStyle = "#5E6E64"; ctx.textAlign = "center";
+      ctx.fillStyle = "#6B7C71"; ctx.textAlign = "center";
       ctx.font = "15px 'IBM Plex Mono', monospace";
       ctx.fillText("NO SIGNAL", w/2, h/2);
       ctx.font = "11px 'IBM Plex Mono', monospace";
@@ -498,7 +564,7 @@
     ctx.fillText(hh+":"+mm+":"+ss, w-12, 20);
 
     ctx.textAlign = "left";
-    ctx.fillStyle = "rgba(94,110,100,0.9)"; ctx.font = "10px 'IBM Plex Mono', monospace";
+    ctx.fillStyle = "rgba(107,124,113,0.9)"; ctx.font = "10px 'IBM Plex Mono', monospace";
     ctx.fillText("SIMULATED FEED · " + w + "×" + h, 12, h-12);
 
     if (flagged){
@@ -596,16 +662,28 @@
     return true;
   }
 
+  function renderFilterCounts(){
+    var counts = { all: cameras.length, online: 0, alert: 0, offline: 0 };
+    cameras.forEach(function(c){ counts[c.status] = (counts[c.status] || 0) + 1; });
+    byId("countAll").textContent = counts.all;
+    byId("countOnline").textContent = counts.online || 0;
+    byId("countAlert").textContent = counts.alert || 0;
+    byId("countOffline").textContent = counts.offline || 0;
+  }
+
   function renderCameraList(){
     var list = byId("cameraList");
     var visible = cameras.filter(matchesFilter);
+    byId("camSearchClear").classList.toggle("show", !!state.camSearch);
     if (visible.length === 0){
-      list.innerHTML = '<div class="cam-empty">No cameras match this filter.</div>';
+      list.innerHTML = '<div class="cam-empty">No cameras match this filter. <button type="button" id="camEmptyReset">Clear filters</button></div>';
+      var resetBtn = byId("camEmptyReset");
+      if (resetBtn) resetBtn.addEventListener("click", resetCameraFilters);
       return;
     }
     var html = visible.map(function(cam){
       var sel = cam.id === state.selectedCameraId ? " selected" : "";
-      return '<div class="cam-row'+sel+'" data-cam="'+cam.id+'">'+
+      return '<div class="cam-row'+sel+'" data-cam="'+cam.id+'" role="option" tabindex="0" aria-selected="'+(cam.id === state.selectedCameraId)+'" aria-label="'+cam.name+', '+cam.sector+', '+cam.status+'">'+
         '<span class="cam-dot '+cam.status+'"></span>'+
         '<div class="cam-info">'+
           '<div class="cam-name">'+cam.name+'</div>'+
@@ -614,6 +692,18 @@
       '</div>';
     }).join("");
     list.innerHTML = html;
+  }
+
+  function resetCameraFilters(){
+    state.camFilter = "all";
+    state.camSearch = "";
+    byId("camSearch").value = "";
+    Array.prototype.forEach.call(byId("camFilters").querySelectorAll(".chip"), function(c){
+      var isAll = c.getAttribute("data-filter") === "all";
+      c.classList.toggle("active", isAll);
+      c.setAttribute("aria-pressed", isAll ? "true" : "false");
+    });
+    renderCameraList();
   }
 
   /* ============ RENDER: MAP ============ */
@@ -638,15 +728,17 @@
     }
 
     cameras.forEach(function(cam){
-      var color = cam.status === "online" ? "#4FA8A2" : cam.status === "alert" ? "#D99A3E" : "#5E6E64";
+      var color = cam.status === "online" ? "#4FA8A2" : cam.status === "alert" ? "#D99A3E" : "#6B7C71";
       var selected = cam.id === state.selectedCameraId;
-      parts.push('<g class="node" data-cam="'+cam.id+'">');
+      parts.push('<g class="node" data-cam="'+cam.id+'" tabindex="0" role="button" aria-label="'+cam.name+', '+cam.status+'">');
       if (cam.status === "alert"){
         parts.push('<circle class="node-pulse" cx="'+cam.x+'" cy="'+cam.y+'" r="5" fill="none" stroke="'+color+'" stroke-width="1.6"/>');
       }
       if (selected){
         parts.push('<circle cx="'+cam.x+'" cy="'+cam.y+'" r="10" fill="none" stroke="'+color+'" stroke-width="1" opacity="0.5"/>');
       }
+      // transparent larger hit-target so the node is easy to click/tap precisely
+      parts.push('<circle cx="'+cam.x+'" cy="'+cam.y+'" r="14" fill="transparent"/>');
       parts.push('<circle cx="'+cam.x+'" cy="'+cam.y+'" r="'+(cam.status==="offline"?3.6:4.4)+'" fill="'+color+'"'+(cam.status==="offline"?' fill-opacity="0.5"':'')+'/>');
       parts.push('<text class="node-label" x="'+(cam.x+9)+'" y="'+(cam.y+3.5)+'">'+cam.id+'</text>');
       parts.push('</g>');
@@ -680,8 +772,6 @@
 
   /* ============ RENDER: ALERT FEED ============ */
 
-  var severityColor = { high:"var(--red)", med:"var(--amber)", low:"var(--teal)" };
-
   function renderFeedStats(){
     var open = state.alerts.filter(function(a){ return !a.acknowledged; });
     var high = open.filter(function(a){ return a.severity === "high"; }).length;
@@ -701,10 +791,10 @@
       var cam = cameraById(a.cameraId);
       var ackClass = a.acknowledged ? " ack" : "";
       var selClass = a.id === state.selectedAlertId ? " selected" : "";
-      var scoreColor = a.score >= 70 ? "var(--red)" : a.score >= 45 ? "var(--amber)" : "var(--teal)";
+      var newClass = a.id === state.lastNewAlertId ? " is-new" : "";
       var thumb = (a.evidence && a.evidence.frames && a.evidence.frames.length)
         ? a.evidence.frames[a.evidence.frames.length-1] : null;
-      return '<div class="alert-item'+ackClass+selClass+'" data-alert="'+a.id+'">'+
+      return '<div class="alert-item'+ackClass+selClass+newClass+'" data-alert="'+a.id+'" tabindex="0" role="button" aria-label="'+a.type+' at '+(cam?cam.name:a.cameraId)+', severity '+a.severity+', '+(a.acknowledged?'acknowledged':'unacknowledged')+'">'+
         '<div class="alert-top">'+
           '<span class="sev-badge '+a.severity+'">'+a.severity+'</span>'+
           '<span class="alert-time">'+fmtTime(a.ts)+'</span>'+
@@ -712,30 +802,43 @@
         '<div class="alert-type">'+a.type+'</div>'+
         '<div class="alert-meta">'+(cam ? cam.name : a.cameraId)+'</div>'+
         '<div class="alert-score">'+
-          '<div class="score-bar"><div class="score-fill" style="width:'+a.score+'%; background:'+scoreColor+';"></div></div>'+
+          '<div class="score-bar"><div class="score-fill" style="width:'+a.score+'%; background:'+scoreColor(a.score)+';"></div></div>'+
           '<div class="score-num">'+a.score+'</div>'+
         '</div>'+
         (thumb ? '<img class="alert-thumb" src="'+thumb+'" alt="Saved evidence for '+a.id+'">' : '')+
+        '<div class="alert-actions">'+
+          (a.acknowledged
+            ? ''
+            : '<button class="btn small" data-action="quick-ack" data-alert="'+a.id+'">Acknowledge</button>')+
+        '</div>'+
       '</div>';
     }).join("");
     feed.innerHTML = html;
   }
 
+  function acknowledgeAlert(alertId, opts){
+    var a = state.alerts.find(function(x){ return x.id === alertId; });
+    if (!a || a.acknowledged) return;
+    a.acknowledged = true;
+    renderAll();
+    if (!opts || !opts.silent) showToast("Alert " + a.id + " acknowledged.");
+  }
+
   /* ============ CASE VIEW ============ */
 
   function openCaseView(alertId){
-    var alert = state.alerts.find(function(a){ return a.id === alertId; });
-    if (!alert) return;
+    var alertObj = state.alerts.find(function(a){ return a.id === alertId; });
+    if (!alertObj) return;
     state.selectedAlertId = alertId;
-    var cam = cameraById(alert.cameraId);
+    var cam = cameraById(alertObj.cameraId);
 
     // "linked events": other alerts within +/- 5 min in the same or adjacent sector — simple correlation demo
     var windowMs = 5*60*1000;
     var linked = state.alerts.filter(function(a){
-      if (a.id === alert.id) return false;
+      if (a.id === alertObj.id) return false;
       var c2 = cameraById(a.cameraId);
       var sameSector = c2 && cam && c2.sector === cam.sector;
-      var close = Math.abs(a.ts - alert.ts) <= windowMs;
+      var close = Math.abs(a.ts - alertObj.ts) <= windowMs;
       return sameSector && close;
     }).slice(0,4);
 
@@ -745,25 +848,25 @@
     panel.style.display = "flex";
     panel.innerHTML =
       '<div class="case-head">'+
-        '<button class="back-btn" id="caseBack">&larr;</button>'+
-        '<div class="case-title">Case '+alert.id+'</div>'+
+        '<button class="back-btn" id="caseBack" aria-label="Back to alert feed">&larr;</button>'+
+        '<div class="case-title">Case '+alertObj.id+'</div>'+
       '</div>'+
       '<div class="case-body">'+
         '<div class="case-section">'+
           '<h4>Primary event</h4>'+
-          '<div class="alert-type" style="margin-top:0;">'+alert.type+'</div>'+
-          '<div class="alert-meta" style="margin-top:4px;">'+(cam?cam.name:alert.cameraId)+' &middot; '+fmtTime(alert.ts)+'</div>'+
-          '<div class="alert-score"><div class="score-bar"><div class="score-fill" style="width:'+alert.score+'%; background:'+(alert.score>=70?'var(--red)':alert.score>=45?'var(--amber)':'var(--teal)')+';"></div></div><div class="score-num">'+alert.score+'</div></div>'+
+          '<div class="alert-type" style="margin-top:0;">'+alertObj.type+'</div>'+
+          '<div class="alert-meta" style="margin-top:4px;">'+(cam?cam.name:alertObj.cameraId)+' &middot; '+fmtTime(alertObj.ts)+'</div>'+
+          '<div class="alert-score"><div class="score-bar"><div class="score-fill" style="width:'+alertObj.score+'%; background:'+scoreColor(alertObj.score)+';"></div></div><div class="score-num">'+alertObj.score+'</div></div>'+
         '</div>'+
         '<div class="case-section">'+
           '<h4>Recorded evidence</h4>'+
-          (alert.evidence && alert.evidence.frames && alert.evidence.frames.length
-            ? '<img id="evidenceImg" class="evidence-img" src="'+alert.evidence.frames[0]+'" alt="Recorded evidence for '+alert.id+'">'+
-              '<div class="alert-meta" style="margin-top:6px;">'+alert.evidence.frames.length+' frames saved automatically around '+fmtTime(alert.evidence.capturedAt)+' &middot; simulated feed, retained with this case</div>'
+          (alertObj.evidence && alertObj.evidence.frames && alertObj.evidence.frames.length
+            ? '<img id="evidenceImg" class="evidence-img" src="'+alertObj.evidence.frames[0]+'" alt="Recorded evidence for '+alertObj.id+'">'+
+              '<div class="alert-meta" style="margin-top:6px;">'+alertObj.evidence.frames.length+' frames saved automatically around '+fmtTime(alertObj.evidence.capturedAt)+' &middot; simulated feed, retained with this case</div>'
             : '<div class="alert-meta">No evidence was saved for this event.</div>')+
         '</div>'+
         '<div class="case-section">'+
-          '<h4>Linked events ('+cam?cam.sector:''+')</h4>'+
+          '<h4>Linked events'+(cam ? ' (' + cam.sector + ')' : '')+'</h4>'+
           (linked.length
             ? linked.map(function(a){
                 var c2 = cameraById(a.cameraId);
@@ -777,7 +880,7 @@
         '<div class="case-section">'+
           '<h4>Actions</h4>'+
           '<div style="display:flex; gap:8px;">'+
-            '<button class="btn primary" id="ackBtn" '+(alert.acknowledged?'disabled':'')+'>'+(alert.acknowledged?'Acknowledged':'Acknowledge')+'</button>'+
+            '<button class="btn primary" id="ackBtn" '+(alertObj.acknowledged?'disabled':'')+'>'+(alertObj.acknowledged?'Acknowledged':'Acknowledge')+'</button>'+
             '<button class="btn" id="escalateBtn">Escalate to sector HQ</button>'+
           '</div>'+
         '</div>'+
@@ -785,17 +888,16 @@
 
     byId("caseBack").addEventListener("click", closeCaseView);
     byId("ackBtn").addEventListener("click", function(){
-      alert.acknowledged = true;
-      renderAll();
+      acknowledgeAlert(alertObj.id, { silent:true });
       openCaseView(alertId);
-      showToast("Alert " + alert.id + " acknowledged.");
+      showToast("Alert " + alertObj.id + " acknowledged.");
     });
     byId("escalateBtn").addEventListener("click", function(){
-      showToast("Case " + alert.id + " escalated to sector HQ.");
+      showToast("Case " + alertObj.id + " escalated to sector HQ.");
     });
 
-    if (alert.evidence && alert.evidence.frames && alert.evidence.frames.length > 1){
-      var frames = alert.evidence.frames;
+    if (alertObj.evidence && alertObj.evidence.frames && alertObj.evidence.frames.length > 1){
+      var frames = alertObj.evidence.frames;
       var idx = 0;
       window.__evidenceTimer = setInterval(function(){
         idx = (idx + 1) % frames.length;
@@ -803,6 +905,8 @@
         if (img) img.src = frames[idx];
       }, 380);
     }
+
+    byId("caseBack").focus();
   }
 
   function closeCaseView(){
@@ -817,6 +921,7 @@
 
   function renderAll(){
     renderHeaderStats();
+    renderFilterCounts();
     renderCameraList();
     renderCenterView();
     renderDetailStrip();
@@ -831,34 +936,55 @@
     renderCameraList();
   });
 
+  byId("camSearchClear").addEventListener("click", function(){
+    state.camSearch = "";
+    byId("camSearch").value = "";
+    byId("camSearch").focus();
+    renderCameraList();
+  });
+
   byId("camFilters").addEventListener("click", function(e){
     var btn = e.target.closest(".chip");
     if (!btn) return;
     state.camFilter = btn.getAttribute("data-filter");
     Array.prototype.forEach.call(byId("camFilters").querySelectorAll(".chip"), function(c){
-      c.classList.toggle("active", c === btn);
+      var isActive = c === btn;
+      c.classList.toggle("active", isActive);
+      c.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
     renderCameraList();
   });
 
-  byId("cameraList").addEventListener("click", function(e){
-    var row = e.target.closest(".cam-row");
-    if (!row) return;
-    state.selectedCameraId = row.getAttribute("data-cam");
+  function selectCameraFromEl(el){
+    var camId = el.getAttribute("data-cam");
+    if (!camId) return;
+    state.selectedCameraId = camId;
     state.mapView = "feed";
     renderCameraList();
     renderCenterView();
     renderDetailStrip();
+  }
+
+  byId("cameraList").addEventListener("click", function(e){
+    var row = e.target.closest(".cam-row");
+    if (!row) return;
+    selectCameraFromEl(row);
+  });
+  byId("cameraList").addEventListener("keydown", function(e){
+    var row = e.target.closest(".cam-row");
+    if (!row) return;
+    onActivateKey(e, function(){ selectCameraFromEl(row); });
   });
 
   byId("mapSvg").addEventListener("click", function(e){
     var node = e.target.closest(".node");
     if (!node) return;
-    state.selectedCameraId = node.getAttribute("data-cam");
-    state.mapView = "feed";
-    renderCameraList();
-    renderCenterView();
-    renderDetailStrip();
+    selectCameraFromEl(node);
+  });
+  byId("mapSvg").addEventListener("keydown", function(e){
+    var node = e.target.closest(".node");
+    if (!node) return;
+    onActivateKey(e, function(){ selectCameraFromEl(node); });
   });
 
   byId("backToMapBtn").addEventListener("click", function(){
@@ -870,6 +996,7 @@
     state.fenceOn = !state.fenceOn;
     this.textContent = "Virtual fence: " + (state.fenceOn ? "on" : "off");
     this.classList.toggle("active", state.fenceOn);
+    this.setAttribute("aria-pressed", state.fenceOn ? "true" : "false");
     renderMap();
   });
 
@@ -890,9 +1017,20 @@
   });
 
   byId("alertFeed").addEventListener("click", function(e){
+    var quickAck = e.target.closest("[data-action='quick-ack']");
+    if (quickAck){
+      e.stopPropagation();
+      acknowledgeAlert(quickAck.getAttribute("data-alert"));
+      return;
+    }
     var item = e.target.closest(".alert-item");
     if (!item) return;
     openCaseView(item.getAttribute("data-alert"));
+  });
+  byId("alertFeed").addEventListener("keydown", function(e){
+    var item = e.target.closest(".alert-item");
+    if (!item) return;
+    onActivateKey(e, function(){ openCaseView(item.getAttribute("data-alert")); });
   });
 
   /* ============ SIMULATED LIVE FEED ============ */
@@ -903,7 +1041,12 @@
       revertExpiredCameraAlerts();
       var a = generateAlert();
       if (a){
+        state.lastNewAlertId = a.id;
         renderAll();
+        showToast("New alert: " + a.type + " — " + (cameraById(a.cameraId)||{}).name);
+        setTimeout(function(){
+          if (state.lastNewAlertId === a.id) state.lastNewAlertId = null;
+        }, 1700);
       }
       scheduleNextAlert();
     }, delay);
@@ -913,6 +1056,7 @@
     tickClock();
     revertExpiredCameraAlerts();
     renderHeaderStats();
+    renderFilterCounts();
     if (state.mapView === "map") renderMap();
   }
 
