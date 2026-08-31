@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentinel Line — Operations Console (Prototype)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0E1512;
+    --bg-soft: #121913;
+    --surface: #182019;
+    --surface-2: #1C2620;
+    --border: #2A352E;
+    --border-soft: #212B24;
+    --text: #E7ECE5;
+    --text-muted: #8FA095;
+    --text-dim: #5E6E64;
+    --amber: #D99A3E;
+    --amber-dim: rgba(217,154,62,0.16);
+    --teal: #4FA8A2;
+    --teal-dim: rgba(79,168,162,0.16);
+    --red: #C4573F;
+    --red-dim: rgba(196,87,63,0.16);
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'IBM Plex Sans',sans-serif; font-size:14.5px;
+    -webkit-font-smoothing:antialiased;
+    height:100vh; overflow:hidden;
+  }
+  h1,h2,h3,h4{ font-family:'Space Grotesk',sans-serif; font-weight:600; margin:0; letter-spacing:-0.01em; }
+  .mono{ font-family:'IBM Plex Mono',monospace; }
+  button{ font-family:inherit; cursor:pointer; }
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+  ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:4px; }
+
+  /* ---------------- Shell ---------------- */
+  .app{ display:flex; flex-direction:column; height:100vh; }
+
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    height:56px; padding:0 20px; border-bottom:1px solid var(--border-soft);
+    flex-shrink:0; background:var(--bg-soft);
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-name{ font-size:15.5px; }
+  .status-strip{ display:flex; align-items:center; gap:22px; }
+  .status-item{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text-muted); }
+  .status-item .dot{ width:6px; height:6px; border-radius:50%; }
+  .clock{ font-family:'IBM Plex Mono'; font-size:12.5px; color:var(--text-dim); min-width:150px; text-align:right; }
+
+  .body{ flex:1; display:grid; grid-template-columns: 280px 1fr 340px; min-height:0; }
+  @media (max-width: 1080px){ .body{ grid-template-columns: 240px 1fr 300px; } }
+
+  /* ---------------- Panels ---------------- */
+  .panel{ border-right:1px solid var(--border-soft); display:flex; flex-direction:column; min-height:0; }
+  .panel:last-child{ border-right:none; }
+  .panel-head{
+    padding:16px 18px 12px; border-bottom:1px solid var(--border-soft); flex-shrink:0;
+  }
+  .panel-head h2{ font-size:13px; text-transform:none; color:var(--text-muted); font-weight:500; letter-spacing:0.02em; }
+  .panel-body{ flex:1; overflow-y:auto; padding: 10px 0; }
+
+  /* ---------------- Camera list ---------------- */
+  .search-box{
+    margin:12px 18px 0; position:relative;
+  }
+  .search-box input{
+    width:100%; background:var(--surface); border:1px solid var(--border);
+    border-radius:3px; padding:8px 10px; color:var(--text); font-size:13px;
+    font-family:inherit;
+  }
+  .search-box input:focus{ outline:none; border-color:var(--teal); }
+  .filter-row{ display:flex; gap:6px; margin:10px 18px 4px; flex-wrap:wrap; }
+  .chip{
+    font-size:11.5px; padding:4px 9px; border-radius:12px; border:1px solid var(--border);
+    color:var(--text-dim); background:transparent; transition:all .12s ease;
+  }
+  .chip.active{ border-color:var(--teal); color:var(--teal); background:var(--teal-dim); }
+
+  .cam-row{
+    display:flex; align-items:center; gap:10px; padding:9px 18px;
+    cursor:pointer; border-left:2px solid transparent;
+  }
+  .cam-row:hover{ background:var(--surface); }
+  .cam-row.selected{ background:var(--surface); border-left-color:var(--teal); }
+  .cam-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .cam-dot.online{ background:var(--teal); }
+  .cam-dot.offline{ background:var(--text-dim); }
+  .cam-dot.alert{ background:var(--amber); box-shadow:0 0 0 3px var(--amber-dim); }
+  .cam-info{ flex:1; min-width:0; }
+  .cam-name{ font-size:13.5px; color:var(--text); }
+  .cam-sector{ font-size:11px; color:var(--text-dim); }
+  .cam-empty{ padding:20px 18px; color:var(--text-dim); font-size:13px; }
+
+  /* ---------------- Map ---------------- */
+  .map-wrap{ flex:1; position:relative; background:var(--bg); min-height:0; }
+  .map-wrap svg{ width:100%; height:100%; display:block; }
+  .map-legend{
+    position:absolute; bottom:16px; left:18px; display:flex; gap:16px;
+    font-size:11.5px; color:var(--text-dim);
+  }
+  .map-legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .legend-dot{ width:7px; height:7px; border-radius:50%; display:inline-block; }
+  .map-toolbar{
+    position:absolute; top:16px; left:18px; display:flex; gap:8px; z-index:3;
+  }
+  .tbtn{
+    background:var(--surface); border:1px solid var(--border); color:var(--text-muted);
+    font-size:12px; padding:6px 12px; border-radius:3px;
+  }
+  .tbtn:hover{ border-color:var(--text-dim); color:var(--text); }
+  .tbtn.active{ border-color:var(--teal); color:var(--teal); }
+  .view-toggle{ display:flex; gap:6px; padding-right:8px; margin-right:8px; border-right:1px solid var(--border); }
+
+  #feedCanvas{ width:100%; height:100%; display:block; background:#0B100D; }
+
+  .alert-thumb{
+    width:100%; display:block; margin-top:8px; border-radius:3px;
+    border:1px solid var(--border-soft); background:#000;
+  }
+  .evidence-img{
+    width:100%; display:block; border-radius:4px; border:1px solid var(--border); background:#000;
+  }
+
+  @keyframes pulseRing{ 0%{ r:5; opacity:0.85; } 70%{ r:26; opacity:0; } 100%{ r:26; opacity:0; } }
+  .node-pulse{ animation:pulseRing 2.4s ease-out infinite; }
+  .node{ cursor:pointer; }
+  .node-label{ font-family:'IBM Plex Mono'; font-size:9.5px; fill:var(--text-dim); pointer-events:none; }
+  @media (prefers-reduced-motion: reduce){ .node-pulse{ animation:none; } }
+
+  /* ---------------- Detail drawer (bottom of map) ---------------- */
+  .detail-strip{
+    border-top:1px solid var(--border-soft); background:var(--bg-soft);
+    padding:14px 20px; display:flex; gap:28px; align-items:center; flex-shrink:0;
+    min-height:76px;
+  }
+  .detail-strip .empty{ color:var(--text-dim); font-size:13px; }
+  .d-field{ display:flex; flex-direction:column; gap:3px; }
+  .d-field label{ font-size:10.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em; }
+  .d-field .val{ font-size:13.5px; color:var(--text); }
+  .d-field .val.mono{ font-size:12.5px; }
+  .pill{ font-size:11px; padding:3px 9px; border-radius:10px; display:inline-block; }
+  .pill.online{ background:var(--teal-dim); color:var(--teal); }
+  .pill.offline{ background:rgba(94,110,100,0.18); color:var(--text-dim); }
+  .pill.alert{ background:var(--amber-dim); color:var(--amber); }
+  .d-actions{ margin-left:auto; display:flex; gap:8px; }
+  .btn{
+    border:1px solid var(--border); background:transparent; color:var(--text);
+    padding:7px 14px; font-size:12.5px; border-radius:3px;
+  }
+  .btn:hover{ border-color:var(--text-dim); }
+  .btn.primary{ background:var(--amber); border-color:var(--amber); color:#191309; font-weight:500; }
+  .btn.primary:hover{ background:#e6ab52; }
+  .btn:disabled{ opacity:0.4; cursor:not-allowed; }
+
+  /* ---------------- Alert feed ---------------- */
+  .feed-stats{ display:flex; gap:14px; padding:0 18px 12px; }
+  .fstat{ flex:1; }
+  .fstat b{ display:block; font-family:'Space Grotesk'; font-size:19px; }
+  .fstat span{ font-size:10.5px; color:var(--text-dim); }
+
+  .alert-item{
+    padding:12px 18px; border-bottom:1px solid var(--border-soft);
+    cursor:pointer; transition:background .12s ease;
+  }
+  .alert-item:hover{ background:var(--surface); }
+  .alert-item.selected{ background:var(--surface-2); }
+  .alert-item.ack{ opacity:0.45; }
+  .alert-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .sev-badge{ font-size:10px; padding:2px 7px; border-radius:3px; font-weight:500; letter-spacing:0.02em; }
+  .sev-badge.high{ background:var(--red-dim); color:var(--red); }
+  .sev-badge.med{ background:var(--amber-dim); color:var(--amber); }
+  .sev-badge.low{ background:var(--teal-dim); color:var(--teal); }
+  .alert-time{ font-family:'IBM Plex Mono'; font-size:11px; color:var(--text-dim); }
+  .alert-type{ font-size:13.5px; color:var(--text); margin-top:6px; }
+  .alert-meta{ font-size:11.5px; color:var(--text-dim); margin-top:3px; }
+  .alert-score{ display:flex; align-items:center; gap:6px; margin-top:8px; }
+  .score-bar{ flex:1; height:3px; background:var(--border-soft); border-radius:2px; overflow:hidden; }
+  .score-fill{ height:100%; border-radius:2px; }
+  .score-num{ font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--text-dim); width:24px; text-align:right; }
+
+  .empty-feed{ padding:24px 18px; color:var(--text-dim); font-size:13px; text-align:center; }
+
+  /* ---------------- Case panel (modal-ish, slides from right within alert panel) ---------------- */
+  .case-panel{
+    position:absolute; inset:0; background:var(--bg); z-index:5;
+    display:flex; flex-direction:column;
+  }
+  .case-head{
+    padding:16px 18px; border-bottom:1px solid var(--border-soft);
+    display:flex; align-items:center; gap:10px; flex-shrink:0;
+  }
+  .back-btn{ background:none; border:none; color:var(--text-muted); font-size:18px; padding:0 4px; line-height:1; }
+  .back-btn:hover{ color:var(--text); }
+  .case-title{ font-size:14px; }
+  .case-body{ flex:1; overflow-y:auto; padding:16px 18px; }
+  .case-section{ margin-bottom:22px; }
+  .case-section h4{ font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-dim); margin-bottom:10px; font-weight:500; }
+  .linked-event{ display:flex; gap:10px; padding:9px 0; border-top:1px solid var(--border-soft); }
+  .linked-event:first-child{ border-top:none; }
+  .linked-dot{ width:6px; height:6px; border-radius:50%; background:var(--teal); margin-top:6px; flex-shrink:0; }
+  .linked-body .lt{ font-size:13px; color:var(--text); }
+  .linked-body .ls{ font-size:11px; color:var(--text-dim); margin-top:2px; }
+
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+    padding:10px 18px; border-radius:4px; font-size:13px; opacity:0; pointer-events:none;
+    transition:opacity .2s ease, transform .2s ease; z-index:50;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <div class="brand">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2 L21 6.5 V12.5 C21 17.5 17.2 21.2 12 22.5 C6.8 21.2 3 17.5 3 12.5 V6.5 Z" stroke="#D99A3E" stroke-width="1.4"/>
+        <circle cx="12" cy="12" r="2.4" fill="#4FA8A2"/>
+      </svg>
+      <span class="brand-name">Sentinel Line <span style="color:var(--text-dim); font-weight:400; font-size:12.5px;">— prototype console</span></span>
+    </div>
+    <div class="status-strip">
+      <div class="status-item"><span class="dot" style="background:var(--teal);"></span><span id="onlineCount">—</span> cameras online</div>
+      <div class="status-item"><span class="dot" style="background:var(--amber);"></span><span id="openAlertCount">—</span> open alerts</div>
+      <div class="clock mono" id="clock">—</div>
+    </div>
+  </header>
+
+  <div class="body">
+    <!-- LEFT: camera list -->
+    <div class="panel" id="cameraPanel">
+      <div class="panel-head"><h2>Cameras</h2></div>
+      <div class="search-box">
+        <input type="text" id="camSearch" placeholder="Search by name or sector…">
+      </div>
+      <div class="filter-row" id="camFilters">
+        <button class="chip active" data-filter="all">All</button>
+        <button class="chip" data-filter="online">Online</button>
+        <button class="chip" data-filter="alert">Alert</button>
+        <button class="chip" data-filter="offline">Offline</button>
+      </div>
+      <div class="panel-body" id="cameraList"></div>
+    </div>
+
+    <!-- CENTER: map + detail strip -->
+    <div class="panel" id="mapPanel" style="border-right:1px solid var(--border-soft); display:flex; flex-direction:column;">
+      <div class="map-wrap">
+        <div class="map-toolbar">
+          <button class="tbtn" id="backToMapBtn" style="display:none;">&larr; Back to map</button>
+          <button class="tbtn active" data-fence="1" id="fenceToggle">Virtual fence: on</button>
+        </div>
+        <svg id="mapSvg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg"></svg>
+        <canvas id="feedCanvas" width="700" height="500" style="display:none;"></canvas>
+        <div class="map-legend">
+          <span><span class="legend-dot" style="background:var(--teal);"></span>Online</span>
+          <span><span class="legend-dot" style="background:var(--amber);"></span>Active alert</span>
+          <span><span class="legend-dot" style="background:var(--text-dim);"></span>Offline</span>
+        </div>
+      </div>
+      <div class="detail-strip" id="detailStrip">
+        <div class="empty">Select a camera on the map or from the list to view its status.</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: alert feed / case view -->
+    <div class="panel" id="feedPanel" style="position:relative;">
+      <div class="panel-head"><h2>Live alert feed</h2></div>
+      <div class="feed-stats">
+        <div class="fstat"><b id="statHigh">0</b><span>High severity</span></div>
+        <div class="fstat"><b id="statOpen">0</b><span>Unacknowledged</span></div>
+        <div class="fstat"><b id="statAvg">0</b><span>Avg. threat score</span></div>
+      </div>
+      <div class="panel-body" id="alertFeed"></div>
+
+      <div class="case-panel" id="casePanel" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============ DATA MODEL ============ */
+
+  var SECTORS = ["Sector 02","Sector 04","Sector 05"];
+
+  var cameras = [
+    { id:"CAM-01", name:"CAM-01 — North Ridge",   sector:"Sector 04", x:120, y:360, status:"online" },
+    { id:"CAM-02", name:"CAM-02 — Culvert Rd",     sector:"Sector 04", x:180, y:300, status:"online" },
+    { id:"CAM-03", name:"CAM-03 — Watch Post 3",   sector:"Sector 04", x:230, y:230, status:"online" },
+    { id:"CAM-04", name:"CAM-04 — Fence Line A",   sector:"Sector 04", x:290, y:170, status:"online" },
+    { id:"CAM-05", name:"CAM-05 — Bridge Approach",sector:"Sector 02", x:370, y:120, status:"online" },
+    { id:"CAM-06", name:"CAM-06 — Check Post 2",   sector:"Sector 02", x:450, y:95,  status:"online" },
+    { id:"CAM-07", name:"CAM-07 — Border Road E",  sector:"Sector 02", x:530, y:120, status:"offline" },
+    { id:"CAM-08", name:"CAM-08 — Ridge Overlook", sector:"Sector 05", x:560, y:220, status:"online" },
+    { id:"CAM-09", name:"CAM-09 — South Trail",    sector:"Sector 05", x:520, y:300, status:"online" },
+    { id:"CAM-10", name:"CAM-10 — Depot Gate",     sector:"Sector 05", x:460, y:370, status:"online" }
+  ];
+
+  var alertTemplates = [
+    { type:"Virtual fence crossing", severity:"high", scoreRange:[78,96] },
+    { type:"Loitering near fence line", severity:"med", scoreRange:[45,65] },
+    { type:"Unrecognized face match", severity:"high", scoreRange:[70,92] },
+    { type:"Night-time movement, unverified", severity:"med", scoreRange:[38,58] },
+    { type:"Vehicle — plate low confidence", severity:"low", scoreRange:[15,34] },
+    { type:"Group movement, off-hour", severity:"med", scoreRange:[50,68] },
+    { type:"Possible camera tamper", severity:"high", scoreRange:[80,99] }
+  ];
+
+  var state = {
+    selectedCameraId: null,
+    selectedAlertId: null,
+    camFilter: "all",
+    camSearch: "",
+    fenceOn: true,
+    mapView: "map",   // "map" | "feed"
+    alerts: [],       // {id, cameraId, type, severity, score, ts, acknowledged}
+    nextAlertId: 1
+  };
+
+  /* ============ HELPERS ============ */
+
+  function pad(n){ return n < 10 ? "0"+n : ""+n; }
+  function fmtTime(d){ return pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds()); }
+  function fmtClock(d){
+    return d.toLocaleDateString(undefined,{month:"short",day:"2-digit"}) + "  " + fmtTime(d);
+  }
+  function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+  function pick(arr){ return arr[randInt(0,arr.length-1)]; }
+  function byId(id){ return document.getElementById(id); }
+
+  function cameraById(id){
+    for (var i=0;i<cameras.length;i++){ if (cameras[i].id===id) return cameras[i]; }
+    return null;
+  }
+
+  function showToast(msg){
+    var t = byId("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(showToast._h);
+    showToast._h = setTimeout(function(){ t.classList.remove("show"); }, 2200);
+  }
+
+  /* ============ ALERT GENERATION ============ */
+
+  function generateAlert(){
+    var onlineCams = cameras.filter(function(c){ return c.status !== "offline"; });
+    if (onlineCams.length === 0) return null;
+    var cam = pick(onlineCams);
+    var tmpl = pick(alertTemplates);
+    var score = randInt(tmpl.scoreRange[0], tmpl.scoreRange[1]);
+    var alert = {
+      id: "A" + (state.nextAlertId++),
+      cameraId: cam.id,
+      type: tmpl.type,
+      severity: tmpl.severity,
+      score: score,
+      ts: new Date(),
+      acknowledged: false
+    };
+    state.alerts.unshift(alert);
+    if (state.alerts.length > 60) state.alerts.pop();
+
+    // briefly flag the camera as "alert" status, then revert after a while
+    cam.status = "alert";
+    cam._alertRevertAt = Date.now() + 14000;
+
+    // record and save a short evidence clip for this event — retained on the
+    // alert/case regardless of whether it's later acknowledged
+    alert.evidence = captureEvidenceClip(cam.id, alert.ts);
+
+    return alert;
+  }
+
+  function revertExpiredCameraAlerts(){
+    var now = Date.now();
+    cameras.forEach(function(c){
+      if (c.status === "alert" && c._alertRevertAt && now > c._alertRevertAt){
+        c.status = "online";
+        delete c._alertRevertAt;
+      }
+    });
+  }
+
+  /* ============ SIMULATED CAMERA FEED ============ */
+  /* There is no real video source in this prototype. This renders a small,
+     deterministic synthetic scene per camera (per-camera seeded so each one
+     looks distinct) onto a canvas, and is also used to generate the
+     "recorded evidence" frames attached to each alert. It is labeled
+     "SIMULATED FEED" on-screen so it's never mistaken for a live stream. */
+
+  function hashStr(s){
+    var h = 0;
+    for (var i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i)) | 0; }
+    return h;
+  }
+
+  function mulberry32(seed){
+    return function(){
+      seed = (seed + 0x6D2B79F5) | 0;
+      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function drawFeedFrame(ctx, cam, tMs, opts){
+    opts = opts || {};
+    var w = ctx.canvas.width, h = ctx.canvas.height;
+    ctx.clearRect(0,0,w,h);
+
+    if (!cam){
+      ctx.fillStyle = "#0B100D"; ctx.fillRect(0,0,w,h);
+      ctx.fillStyle = "#5E6E64"; ctx.font = "13px 'IBM Plex Mono', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("SELECT A CAMERA TO VIEW ITS FEED", w/2, h/2);
+      ctx.textAlign = "left";
+      return;
+    }
+
+    var seed = hashStr(cam.id);
+    var rand = mulberry32(seed + Math.floor(tMs/300));
+
+    if (cam.status === "offline"){
+      ctx.fillStyle = "#0B100D"; ctx.fillRect(0,0,w,h);
+      for (var n=0;n<220;n++){
+        ctx.fillStyle = "rgba(200,200,200,"+(rand()*0.14)+")";
+        ctx.fillRect(rand()*w, rand()*h, 2, 2);
+      }
+      ctx.fillStyle = "#5E6E64"; ctx.textAlign = "center";
+      ctx.font = "15px 'IBM Plex Mono', monospace";
+      ctx.fillText("NO SIGNAL", w/2, h/2);
+      ctx.font = "11px 'IBM Plex Mono', monospace";
+      ctx.fillText(cam.id + " — feed lost", w/2, h/2+22);
+      ctx.textAlign = "left";
+      return;
+    }
+
+    var grad = ctx.createLinearGradient(0,0,0,h);
+    grad.addColorStop(0, "#141B17"); grad.addColorStop(1, "#0B100D");
+    ctx.fillStyle = grad; ctx.fillRect(0,0,w,h);
+
+    ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, h*0.66); ctx.lineTo(w, h*0.58); ctx.stroke();
+
+    for (var g=0; g<70; g++){
+      ctx.fillStyle = "rgba(255,255,255,"+(rand()*0.03)+")";
+      ctx.fillRect(rand()*w, rand()*h, 1, 1);
+    }
+
+    var objectCount = 2 + (seed % 2);
+    var flagged = (opts.flagged !== undefined) ? opts.flagged : (cam.status === "alert");
+    var flagIdx = Math.abs(seed) % objectCount;
+
+    for (var o=0; o<objectCount; o++){
+      var phase = (Math.abs(seed) % 1000) + o*777;
+      var speed = 0.00011 + (o*0.00003);
+      var driftX = ((tMs*speed + phase) % (w+120)) - 60;
+      var baseY = h*0.5 + o*30 + Math.sin(tMs*0.0006 + phase)*7;
+      var isVehicle = (o % 2 === 0);
+      var isFlag = flagged && (o === flagIdx);
+
+      if (isVehicle){
+        ctx.fillStyle = isFlag ? "#D99A3E" : "rgba(79,168,162,0.55)";
+        ctx.fillRect(driftX, baseY, 30, 13);
+      } else {
+        ctx.fillStyle = isFlag ? "#D99A3E" : "rgba(231,236,229,0.4)";
+        ctx.beginPath(); ctx.arc(driftX+7, baseY-7, 3.6, 0, Math.PI*2); ctx.fill();
+        ctx.fillRect(driftX+3, baseY-2, 9, 15);
+      }
+      if (isFlag){
+        ctx.strokeStyle = "#D99A3E"; ctx.lineWidth = 1.2;
+        ctx.strokeRect(driftX-7, baseY-18, 44, 38);
+        ctx.font = "9px 'IBM Plex Mono', monospace"; ctx.fillStyle = "#D99A3E";
+        ctx.fillText("FLAGGED", driftX-7, baseY-22);
+      }
+    }
+
+    ctx.font = "11px 'IBM Plex Mono', monospace";
+    ctx.fillStyle = "rgba(143,160,149,0.9)"; ctx.textAlign = "left";
+    ctx.fillText(cam.id + " · " + cam.sector, 12, 20);
+
+    ctx.textAlign = "right";
+    var d = new Date(tMs);
+    var hh=("0"+d.getHours()).slice(-2), mm=("0"+d.getMinutes()).slice(-2), ss=("0"+d.getSeconds()).slice(-2);
+    ctx.fillText(hh+":"+mm+":"+ss, w-12, 20);
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(94,110,100,0.9)"; ctx.font = "10px 'IBM Plex Mono', monospace";
+    ctx.fillText("SIMULATED FEED · " + w + "×" + h, 12, h-12);
+
+    if (flagged){
+      if (Math.floor(tMs/500) % 2 === 0){
+        ctx.fillStyle = "#C4573F";
+        ctx.beginPath(); ctx.arc(w-18, h-16, 4, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.textAlign = "right"; ctx.fillStyle = "rgba(196,87,63,0.95)";
+      ctx.fillText("REC", w-28, h-12);
+    }
+    ctx.textAlign = "left";
+  }
+
+  var feedLoopHandle = null;
+
+  function startFeedLoop(){
+    stopFeedLoop();
+    var canvas = byId("feedCanvas");
+    var ctx = canvas.getContext("2d");
+    feedLoopHandle = setInterval(function(){
+      var cam = state.selectedCameraId ? cameraById(state.selectedCameraId) : null;
+      drawFeedFrame(ctx, cam, Date.now());
+    }, 66);
+  }
+
+  function stopFeedLoop(){
+    if (feedLoopHandle){ clearInterval(feedLoopHandle); feedLoopHandle = null; }
+  }
+
+  function renderCenterView(){
+    var svg = byId("mapSvg");
+    var canvas = byId("feedCanvas");
+    var fenceBtn = byId("fenceToggle");
+    var backBtn = byId("backToMapBtn");
+
+    if (state.mapView === "feed"){
+      svg.style.display = "none";
+      canvas.style.display = "";
+      fenceBtn.style.display = "none";
+      backBtn.style.display = "";
+      startFeedLoop();
+    } else {
+      svg.style.display = "";
+      canvas.style.display = "none";
+      fenceBtn.style.display = "";
+      backBtn.style.display = "none";
+      stopFeedLoop();
+      renderMap();
+    }
+  }
+
+  /* Generates a short sequence of "recorded" frames leading up to the alert
+     moment, using an offscreen canvas — this is what gets attached to the
+     alert as its saved evidence, independent of whether the operator was
+     viewing that camera when the alert fired. */
+  function captureEvidenceClip(camId, atDate){
+    var cam = cameraById(camId);
+    var offscreen = document.createElement("canvas");
+    offscreen.width = 320; offscreen.height = 200;
+    var ctx = offscreen.getContext("2d");
+    var frameCount = 5;
+    var spacingMs = 350;
+    var baseTs = atDate.getTime();
+    var frames = [];
+    for (var i=0;i<frameCount;i++){
+      var t = baseTs - (frameCount-1-i)*spacingMs;
+      var flagged = (i === frameCount-1);
+      drawFeedFrame(ctx, cam, t, { flagged: flagged });
+      frames.push(offscreen.toDataURL("image/png"));
+    }
+    return { frames: frames, capturedAt: atDate };
+  }
+
+  /* ============ RENDER: HEADER ============ */
+
+  function renderHeaderStats(){
+    var online = cameras.filter(function(c){ return c.status !== "offline"; }).length;
+    var open = state.alerts.filter(function(a){ return !a.acknowledged; }).length;
+    byId("onlineCount").textContent = online + "/" + cameras.length;
+    byId("openAlertCount").textContent = open;
+  }
+
+  function tickClock(){
+    byId("clock").textContent = fmtClock(new Date());
+  }
+
+  /* ============ RENDER: CAMERA LIST ============ */
+
+  function matchesFilter(cam){
+    if (state.camFilter !== "all" && cam.status !== state.camFilter) return false;
+    if (state.camSearch){
+      var q = state.camSearch.toLowerCase();
+      if (cam.name.toLowerCase().indexOf(q) === -1 && cam.sector.toLowerCase().indexOf(q) === -1) return false;
+    }
+    return true;
+  }
+
+  function renderCameraList(){
+    var list = byId("cameraList");
+    var visible = cameras.filter(matchesFilter);
+    if (visible.length === 0){
+      list.innerHTML = '<div class="cam-empty">No cameras match this filter.</div>';
+      return;
+    }
+    var html = visible.map(function(cam){
+      var sel = cam.id === state.selectedCameraId ? " selected" : "";
+      return '<div class="cam-row'+sel+'" data-cam="'+cam.id+'">'+
+        '<span class="cam-dot '+cam.status+'"></span>'+
+        '<div class="cam-info">'+
+          '<div class="cam-name">'+cam.name+'</div>'+
+          '<div class="cam-sector">'+cam.sector+'</div>'+
+        '</div>'+
+      '</div>';
+    }).join("");
+    list.innerHTML = html;
+  }
+
+  /* ============ RENDER: MAP ============ */
+
+  function renderMap(){
+    var svg = byId("mapSvg");
+    var parts = [];
+
+    parts.push('<defs><linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">'+
+      '<stop offset="0" stop-color="#2A352E"/><stop offset="1" stop-color="#2A352E"/></linearGradient></defs>');
+
+    // stylized border line connecting camera x/y in sequence
+    var sorted = cameras.slice().sort(function(a,b){ return a.x - b.x; });
+    var pathD = "M " + sorted[0].x + " " + sorted[0].y;
+    for (var i=1;i<sorted.length;i++){
+      var prev = sorted[i-1], cur = sorted[i];
+      var mx = (prev.x+cur.x)/2;
+      pathD += " Q " + mx + " " + (prev.y - 20) + " " + cur.x + " " + cur.y;
+    }
+    if (state.fenceOn){
+      parts.push('<path d="'+pathD+'" stroke="#3A4A40" stroke-width="1.6" fill="none" stroke-dasharray="4 6"/>');
+    }
+
+    cameras.forEach(function(cam){
+      var color = cam.status === "online" ? "#4FA8A2" : cam.status === "alert" ? "#D99A3E" : "#5E6E64";
+      var selected = cam.id === state.selectedCameraId;
+      parts.push('<g class="node" data-cam="'+cam.id+'">');
+      if (cam.status === "alert"){
+        parts.push('<circle class="node-pulse" cx="'+cam.x+'" cy="'+cam.y+'" r="5" fill="none" stroke="'+color+'" stroke-width="1.6"/>');
+      }
+      if (selected){
+        parts.push('<circle cx="'+cam.x+'" cy="'+cam.y+'" r="10" fill="none" stroke="'+color+'" stroke-width="1" opacity="0.5"/>');
+      }
+      parts.push('<circle cx="'+cam.x+'" cy="'+cam.y+'" r="'+(cam.status==="offline"?3.6:4.4)+'" fill="'+color+'"'+(cam.status==="offline"?' fill-opacity="0.5"':'')+'/>');
+      parts.push('<text class="node-label" x="'+(cam.x+9)+'" y="'+(cam.y+3.5)+'">'+cam.id+'</text>');
+      parts.push('</g>');
+    });
+
+    svg.innerHTML = parts.join("");
+  }
+
+  /* ============ RENDER: DETAIL STRIP ============ */
+
+  function renderDetailStrip(){
+    var strip = byId("detailStrip");
+    var cam = state.selectedCameraId ? cameraById(state.selectedCameraId) : null;
+    if (!cam){
+      strip.innerHTML = '<div class="empty">Select a camera on the map or from the list to view its status.</div>';
+      return;
+    }
+    var recentAlerts = state.alerts.filter(function(a){ return a.cameraId === cam.id; }).length;
+    strip.innerHTML =
+      '<div class="d-field"><label>Camera</label><div class="val">'+cam.name+'</div></div>'+
+      '<div class="d-field"><label>Sector</label><div class="val">'+cam.sector+'</div></div>'+
+      '<div class="d-field"><label>Status</label><div class="val"><span class="pill '+cam.status+'">'+cam.status+'</span></div></div>'+
+      '<div class="d-field"><label>Stream</label><div class="val mono">rtsp://10.4.'+cam.id.slice(-2)+'.11:554/live</div></div>'+
+      '<div class="d-field"><label>Logged events</label><div class="val">'+recentAlerts+'</div></div>'+
+      '<div class="d-actions">'+
+        (cam.status === "offline"
+          ? '<button class="btn" data-action="ping" data-cam="'+cam.id+'">Attempt reconnect</button>'
+          : '<button class="btn" data-action="mark-offline" data-cam="'+cam.id+'">Simulate feed loss</button>')+
+      '</div>';
+  }
+
+  /* ============ RENDER: ALERT FEED ============ */
+
+  var severityColor = { high:"var(--red)", med:"var(--amber)", low:"var(--teal)" };
+
+  function renderFeedStats(){
+    var open = state.alerts.filter(function(a){ return !a.acknowledged; });
+    var high = open.filter(function(a){ return a.severity === "high"; }).length;
+    var avg = open.length ? Math.round(open.reduce(function(s,a){ return s+a.score; },0)/open.length) : 0;
+    byId("statHigh").textContent = high;
+    byId("statOpen").textContent = open.length;
+    byId("statAvg").textContent = avg;
+  }
+
+  function renderAlertFeed(){
+    var feed = byId("alertFeed");
+    if (state.alerts.length === 0){
+      feed.innerHTML = '<div class="empty-feed">No alerts yet. New activity will appear here automatically.</div>';
+      return;
+    }
+    var html = state.alerts.map(function(a){
+      var cam = cameraById(a.cameraId);
+      var ackClass = a.acknowledged ? " ack" : "";
+      var selClass = a.id === state.selectedAlertId ? " selected" : "";
+      var scoreColor = a.score >= 70 ? "var(--red)" : a.score >= 45 ? "var(--amber)" : "var(--teal)";
+      var thumb = (a.evidence && a.evidence.frames && a.evidence.frames.length)
+        ? a.evidence.frames[a.evidence.frames.length-1] : null;
+      return '<div class="alert-item'+ackClass+selClass+'" data-alert="'+a.id+'">'+
+        '<div class="alert-top">'+
+          '<span class="sev-badge '+a.severity+'">'+a.severity+'</span>'+
+          '<span class="alert-time">'+fmtTime(a.ts)+'</span>'+
+        '</div>'+
+        '<div class="alert-type">'+a.type+'</div>'+
+        '<div class="alert-meta">'+(cam ? cam.name : a.cameraId)+'</div>'+
+        '<div class="alert-score">'+
+          '<div class="score-bar"><div class="score-fill" style="width:'+a.score+'%; background:'+scoreColor+';"></div></div>'+
+          '<div class="score-num">'+a.score+'</div>'+
+        '</div>'+
+        (thumb ? '<img class="alert-thumb" src="'+thumb+'" alt="Saved evidence for '+a.id+'">' : '')+
+      '</div>';
+    }).join("");
+    feed.innerHTML = html;
+  }
+
+  /* ============ CASE VIEW ============ */
+
+  function openCaseView(alertId){
+    var alert = state.alerts.find(function(a){ return a.id === alertId; });
+    if (!alert) return;
+    state.selectedAlertId = alertId;
+    var cam = cameraById(alert.cameraId);
+
+    // "linked events": other alerts within +/- 5 min in the same or adjacent sector — simple correlation demo
+    var windowMs = 5*60*1000;
+    var linked = state.alerts.filter(function(a){
+      if (a.id === alert.id) return false;
+      var c2 = cameraById(a.cameraId);
+      var sameSector = c2 && cam && c2.sector === cam.sector;
+      var close = Math.abs(a.ts - alert.ts) <= windowMs;
+      return sameSector && close;
+    }).slice(0,4);
+
+    clearInterval(window.__evidenceTimer);
+
+    var panel = byId("casePanel");
+    panel.style.display = "flex";
+    panel.innerHTML =
+      '<div class="case-head">'+
+        '<button class="back-btn" id="caseBack">&larr;</button>'+
+        '<div class="case-title">Case '+alert.id+'</div>'+
+      '</div>'+
+      '<div class="case-body">'+
+        '<div class="case-section">'+
+          '<h4>Primary event</h4>'+
+          '<div class="alert-type" style="margin-top:0;">'+alert.type+'</div>'+
+          '<div class="alert-meta" style="margin-top:4px;">'+(cam?cam.name:alert.cameraId)+' &middot; '+fmtTime(alert.ts)+'</div>'+
+          '<div class="alert-score"><div class="score-bar"><div class="score-fill" style="width:'+alert.score+'%; background:'+(alert.score>=70?'var(--red)':alert.score>=45?'var(--amber)':'var(--teal)')+';"></div></div><div class="score-num">'+alert.score+'</div></div>'+
+        '</div>'+
+        '<div class="case-section">'+
+          '<h4>Recorded evidence</h4>'+
+          (alert.evidence && alert.evidence.frames && alert.evidence.frames.length
+            ? '<img id="evidenceImg" class="evidence-img" src="'+alert.evidence.frames[0]+'" alt="Recorded evidence for '+alert.id+'">'+
+              '<div class="alert-meta" style="margin-top:6px;">'+alert.evidence.frames.length+' frames saved automatically around '+fmtTime(alert.evidence.capturedAt)+' &middot; simulated feed, retained with this case</div>'
+            : '<div class="alert-meta">No evidence was saved for this event.</div>')+
+        '</div>'+
+        '<div class="case-section">'+
+          '<h4>Linked events ('+cam?cam.sector:''+')</h4>'+
+          (linked.length
+            ? linked.map(function(a){
+                var c2 = cameraById(a.cameraId);
+                return '<div class="linked-event"><div class="linked-dot"></div><div class="linked-body">'+
+                  '<div class="lt">'+a.type+'</div>'+
+                  '<div class="ls">'+(c2?c2.name:a.cameraId)+' &middot; '+fmtTime(a.ts)+'</div>'+
+                '</div></div>';
+              }).join("")
+            : '<div class="alert-meta">No correlated events in this sector within the time window.</div>')+
+        '</div>'+
+        '<div class="case-section">'+
+          '<h4>Actions</h4>'+
+          '<div style="display:flex; gap:8px;">'+
+            '<button class="btn primary" id="ackBtn" '+(alert.acknowledged?'disabled':'')+'>'+(alert.acknowledged?'Acknowledged':'Acknowledge')+'</button>'+
+            '<button class="btn" id="escalateBtn">Escalate to sector HQ</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>';
+
+    byId("caseBack").addEventListener("click", closeCaseView);
+    byId("ackBtn").addEventListener("click", function(){
+      alert.acknowledged = true;
+      renderAll();
+      openCaseView(alertId);
+      showToast("Alert " + alert.id + " acknowledged.");
+    });
+    byId("escalateBtn").addEventListener("click", function(){
+      showToast("Case " + alert.id + " escalated to sector HQ.");
+    });
+
+    if (alert.evidence && alert.evidence.frames && alert.evidence.frames.length > 1){
+      var frames = alert.evidence.frames;
+      var idx = 0;
+      window.__evidenceTimer = setInterval(function(){
+        idx = (idx + 1) % frames.length;
+        var img = byId("evidenceImg");
+        if (img) img.src = frames[idx];
+      }, 380);
+    }
+  }
+
+  function closeCaseView(){
+    clearInterval(window.__evidenceTimer);
+    state.selectedAlertId = null;
+    byId("casePanel").style.display = "none";
+    byId("casePanel").innerHTML = "";
+    renderAlertFeed();
+  }
+
+  /* ============ FULL RENDER ============ */
+
+  function renderAll(){
+    renderHeaderStats();
+    renderCameraList();
+    renderCenterView();
+    renderDetailStrip();
+    renderFeedStats();
+    renderAlertFeed();
+  }
+
+  /* ============ EVENTS ============ */
+
+  byId("camSearch").addEventListener("input", function(e){
+    state.camSearch = e.target.value;
+    renderCameraList();
+  });
+
+  byId("camFilters").addEventListener("click", function(e){
+    var btn = e.target.closest(".chip");
+    if (!btn) return;
+    state.camFilter = btn.getAttribute("data-filter");
+    Array.prototype.forEach.call(byId("camFilters").querySelectorAll(".chip"), function(c){
+      c.classList.toggle("active", c === btn);
+    });
+    renderCameraList();
+  });
+
+  byId("cameraList").addEventListener("click", function(e){
+    var row = e.target.closest(".cam-row");
+    if (!row) return;
+    state.selectedCameraId = row.getAttribute("data-cam");
+    state.mapView = "feed";
+    renderCameraList();
+    renderCenterView();
+    renderDetailStrip();
+  });
+
+  byId("mapSvg").addEventListener("click", function(e){
+    var node = e.target.closest(".node");
+    if (!node) return;
+    state.selectedCameraId = node.getAttribute("data-cam");
+    state.mapView = "feed";
+    renderCameraList();
+    renderCenterView();
+    renderDetailStrip();
+  });
+
+  byId("backToMapBtn").addEventListener("click", function(){
+    state.mapView = "map";
+    renderCenterView();
+  });
+
+  byId("fenceToggle").addEventListener("click", function(){
+    state.fenceOn = !state.fenceOn;
+    this.textContent = "Virtual fence: " + (state.fenceOn ? "on" : "off");
+    this.classList.toggle("active", state.fenceOn);
+    renderMap();
+  });
+
+  byId("detailStrip").addEventListener("click", function(e){
+    var btn = e.target.closest("button[data-action]");
+    if (!btn) return;
+    var cam = cameraById(btn.getAttribute("data-cam"));
+    if (!cam) return;
+    var action = btn.getAttribute("data-action");
+    if (action === "mark-offline"){
+      cam.status = "offline";
+      showToast(cam.id + " feed lost — camera health alert raised.");
+    } else if (action === "ping"){
+      cam.status = "online";
+      showToast(cam.id + " reconnected.");
+    }
+    renderAll();
+  });
+
+  byId("alertFeed").addEventListener("click", function(e){
+    var item = e.target.closest(".alert-item");
+    if (!item) return;
+    openCaseView(item.getAttribute("data-alert"));
+  });
+
+  /* ============ SIMULATED LIVE FEED ============ */
+
+  function scheduleNextAlert(){
+    var delay = randInt(5000, 11000);
+    setTimeout(function(){
+      revertExpiredCameraAlerts();
+      var a = generateAlert();
+      if (a){
+        renderAll();
+      }
+      scheduleNextAlert();
+    }, delay);
+  }
+
+  function tick(){
+    tickClock();
+    revertExpiredCameraAlerts();
+    renderHeaderStats();
+    if (state.mapView === "map") renderMap();
+  }
+
+  /* ============ INIT ============ */
+
+  function init(){
+    // seed a few initial alerts so the feed isn't empty on load
+    for (var i=0;i<3;i++){
+      var a = generateAlert();
+      if (a){
+        a.ts = new Date(Date.now() - randInt(20000, 240000));
+        a.evidence = captureEvidenceClip(a.cameraId, a.ts);
+      }
+    }
+    // reset camera statuses that seeding may have flagged, except keep it realistic
+    cameras.forEach(function(c){ if (c.status === "alert") c.status = "online"; });
+
+    renderAll();
+    tickClock();
+    setInterval(tick, 1000);
+    scheduleNextAlert();
+  }
+
+  init();
+
+})();
+</script>
+</body>
+</html>
