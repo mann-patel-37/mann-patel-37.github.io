@@ -159,6 +159,7 @@
   .tbtn.active{ border-color:var(--teal); color:var(--teal); }
 
   #feedCanvas{ width:100%; height:100%; display:block; background:#0B100D; }
+  #webcamVideo{ width:100%; height:100%; display:none; background:#0B100D; object-fit:cover; }
 
   .alert-thumb{
     width:100%; display:block; margin-top:8px; border-radius:3px;
@@ -189,7 +190,7 @@
   .pill.online{ background:var(--teal-dim); color:var(--teal); }
   .pill.offline{ background:rgba(107,124,113,0.18); color:var(--text-dim); }
   .pill.alert{ background:var(--amber-dim); color:var(--amber); }
-  .d-actions{ margin-left:auto; display:flex; gap:8px; }
+  .d-actions{ margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; }
   .btn{
     border:1px solid var(--border); background:transparent; color:var(--text);
     padding:7px 14px; font-size:12.5px; border-radius:3px;
@@ -286,7 +287,10 @@
   <div class="body">
     <!-- LEFT: camera list -->
     <div class="panel" id="cameraPanel">
-      <div class="panel-head"><h2>Cameras</h2></div>
+      <div class="panel-head">
+        <h2>Cameras</h2>
+        <button class="tbtn" id="connectWebcamBtn" type="button">+ Connect Webcam</button>
+      </div>
       <div class="search-box">
         <label class="visually-hidden" for="camSearch">Search cameras by name or sector</label>
         <input type="text" id="camSearch" placeholder="Search by name or sector…" autocomplete="off">
@@ -310,6 +314,7 @@
         </div>
         <svg id="mapSvg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Perimeter map with camera positions"></svg>
         <canvas id="feedCanvas" width="700" height="500" style="display:none;"></canvas>
+        <video id="webcamVideo" autoplay playsinline muted style="display:none;"></video>
         <div class="map-legend">
           <span><span class="legend-dot" style="background:var(--teal);"></span>Online</span>
           <span><span class="legend-dot" style="background:var(--amber);"></span>Active alert</span>
@@ -386,6 +391,16 @@
     lastNewAlertId: null
   };
 
+  /* ---- Webcam (local browser device) state ----
+     Kept separate from the `cameras` data objects: a MediaStream isn't
+     serializable/display data, it's a live resource, so it lives here and
+     the `cameras` array only ever holds the plain camera record. */
+  var WEBCAM_CAM_ID = "CAM-WEB-001";
+  var WEBCAM_CAM_NAME = "Laptop Webcam";
+  var webcamState = {
+    stream: null
+  };
+
   /* ============ HELPERS ============ */
 
   function pad(n){ return n < 10 ? "0"+n : ""+n; }
@@ -422,7 +437,9 @@
   /* ============ ALERT GENERATION ============ */
 
   function generateAlert(){
-    var onlineCams = cameras.filter(function(c){ return c.status !== "offline"; });
+    // The local webcam isn't part of the perimeter/fence system, so it's
+    // excluded from the simulated alert generator.
+    var onlineCams = cameras.filter(function(c){ return c.status !== "offline" && c.type !== "webcam"; });
     if (onlineCams.length === 0) return null;
     var cam = pick(onlineCams);
     var tmpl = pick(alertTemplates);
@@ -465,7 +482,9 @@
      deterministic synthetic scene per camera (per-camera seeded so each one
      looks distinct) onto a canvas, and is also used to generate the
      "recorded evidence" frames attached to each alert. It is labeled
-     "SIMULATED FEED" on-screen so it's never mistaken for a live stream. */
+     "SIMULATED FEED" on-screen so it's never mistaken for a live stream.
+     (The one exception is the real webcam feed, which is rendered through
+     its own <video> element — see renderCenterView.) */
 
   function hashStr(s){
     var h = 0;
@@ -597,18 +616,38 @@
   function renderCenterView(){
     var svg = byId("mapSvg");
     var canvas = byId("feedCanvas");
+    var video = byId("webcamVideo");
     var fenceBtn = byId("fenceToggle");
     var backBtn = byId("backToMapBtn");
 
+    var selCam = state.selectedCameraId ? cameraById(state.selectedCameraId) : null;
+    var showLiveWebcam = !!(selCam && selCam.type === "webcam" && webcamState.stream);
+
     if (state.mapView === "feed"){
       svg.style.display = "none";
-      canvas.style.display = "";
       fenceBtn.style.display = "none";
       backBtn.style.display = "";
-      startFeedLoop();
+
+      if (showLiveWebcam){
+        // Real local webcam: show the live <video> element instead of the
+        // synthetic canvas feed, and don't run the simulated draw loop.
+        canvas.style.display = "none";
+        video.style.display = "";
+        stopFeedLoop();
+        attachWebcamStreamToVideo();
+      } else {
+        // Every other camera (including the webcam entry when it's not
+        // currently streaming, e.g. stopped/offline) uses the existing
+        // simulated feed, which already renders a "NO SIGNAL" state.
+        video.style.display = "none";
+        video.srcObject = null;
+        canvas.style.display = "";
+        startFeedLoop();
+      }
     } else {
       svg.style.display = "";
       canvas.style.display = "none";
+      video.style.display = "none";
       fenceBtn.style.display = "";
       backBtn.style.display = "none";
       stopFeedLoop();
@@ -636,6 +675,140 @@
       frames.push(offscreen.toDataURL("image/png"));
     }
     return { frames: frames, capturedAt: atDate };
+  }
+
+  /* ============ WEBCAM (local browser device) ============ */
+  /* Adds an optional extra "camera" backed by the user's own laptop/USB
+     webcam via the browser's native getUserMedia API. No RTSP, no backend,
+     no upload — the stream never leaves the browser tab. Permission is
+     only ever requested in response to an explicit user click (never on
+     page load), per the existing security posture of this prototype. */
+
+  function getWebcamCamera(){
+    return cameraById(WEBCAM_CAM_ID);
+  }
+
+  function ensureWebcamCameraEntry(status){
+    var cam = getWebcamCamera();
+    if (!cam){
+      cam = {
+        id: WEBCAM_CAM_ID,
+        name: WEBCAM_CAM_NAME,
+        sector: "Local Device",
+        type: "webcam",
+        status: status || "offline"
+        // Intentionally no x/y: this isn't a fixed point on the perimeter,
+        // so it's excluded from the map (see renderMap / getMappableCameras).
+      };
+      cameras.push(cam);
+    } else {
+      cam.status = status || cam.status;
+    }
+    return cam;
+  }
+
+  function attachWebcamStreamToVideo(){
+    var video = byId("webcamVideo");
+    if (video && webcamState.stream && video.srcObject !== webcamState.stream){
+      video.srcObject = webcamState.stream;
+    }
+  }
+
+  function detachWebcamTrackHandlers(stream){
+    if (!stream) return;
+    stream.getTracks().forEach(function(track){ track.onended = null; });
+  }
+
+  function handleWebcamTrackEnded(){
+    // Fires if the user revokes camera permission mid-stream, unplugs a USB
+    // webcam, or another application takes exclusive control of it. Handle
+    // it the same way as any other lost feed rather than letting it crash.
+    showToast("Laptop webcam disconnected.");
+    stopWebcam();
+  }
+
+  function selectWebcamInView(){
+    state.selectedCameraId = WEBCAM_CAM_ID;
+    state.mapView = "feed";
+    renderCameraList();
+    renderCenterView();
+    renderDetailStrip();
+  }
+
+  function connectWebcam(){
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      showToast("This browser doesn't support webcam access.");
+      return;
+    }
+    if (webcamState.stream){
+      // Already running — just bring it into view rather than re-requesting.
+      selectWebcamInView();
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      .then(function(stream){
+        webcamState.stream = stream;
+        stream.getVideoTracks().forEach(function(track){
+          track.onended = handleWebcamTrackEnded;
+        });
+        ensureWebcamCameraEntry("online");
+        selectWebcamInView();
+        renderAll();
+        showToast("Laptop webcam connected.");
+      })
+      .catch(function(err){
+        var name = err && err.name;
+        var msg = "Unable to access the webcam.";
+        if (name === "NotAllowedError" || name === "PermissionDeniedError"){
+          msg = "Camera permission was denied.";
+        } else if (name === "NotFoundError" || name === "DevicesNotFoundError"){
+          msg = "No camera device was found.";
+        } else if (name === "NotReadableError" || name === "TrackStartError"){
+          msg = "Camera is already in use by another application.";
+        } else if (name === "OverconstrainedError"){
+          msg = "No camera matched the requested settings.";
+        }
+        // Only touch the camera record if one already exists — a failed
+        // first-ever connection attempt shouldn't invent a fake camera entry.
+        var cam = getWebcamCamera();
+        if (cam){ cam.status = "offline"; renderAll(); }
+        showToast(msg);
+      });
+  }
+
+  function stopWebcam(){
+    if (webcamState.stream){
+      detachWebcamTrackHandlers(webcamState.stream);
+      webcamState.stream.getTracks().forEach(function(track){ track.stop(); });
+      webcamState.stream = null;
+    }
+    var video = byId("webcamVideo");
+    if (video) video.srcObject = null;
+    var cam = getWebcamCamera();
+    if (cam) cam.status = "offline";
+    renderAll();
+  }
+
+  function removeWebcamCamera(){
+    stopWebcam();
+    var idx = -1;
+    for (var i=0;i<cameras.length;i++){ if (cameras[i].id === WEBCAM_CAM_ID){ idx = i; break; } }
+    if (idx !== -1) cameras.splice(idx, 1);
+    if (state.selectedCameraId === WEBCAM_CAM_ID){
+      state.selectedCameraId = null;
+      state.mapView = "map";
+    }
+    renderAll();
+    showToast("Laptop webcam removed.");
+  }
+
+  /* ---- Future AI integration hook ----
+     Intentionally unimplemented for now — no frame analysis happens today.
+     Once a real detection pipeline exists, sample frames from #webcamVideo
+     (e.g. draw to an offscreen canvas on an interval and read the pixel
+     data) and pass each one through this function. */
+  function processVideoFrame(frame){
+    // no-op placeholder, reserved for future AI video-analysis integration
   }
 
   /* ============ RENDER: HEADER ============ */
@@ -708,26 +881,36 @@
 
   /* ============ RENDER: MAP ============ */
 
+  function getMappableCameras(){
+    // The perimeter map only makes sense for fixed-position cameras. The
+    // local webcam has no geographic location, so it's never invented one
+    // and is simply left off the map (still fully visible in the list).
+    return cameras.filter(function(c){ return typeof c.x === "number" && typeof c.y === "number"; });
+  }
+
   function renderMap(){
     var svg = byId("mapSvg");
     var parts = [];
+    var mappable = getMappableCameras();
 
     parts.push('<defs><linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">'+
       '<stop offset="0" stop-color="#2A352E"/><stop offset="1" stop-color="#2A352E"/></linearGradient></defs>');
 
     // stylized border line connecting camera x/y in sequence
-    var sorted = cameras.slice().sort(function(a,b){ return a.x - b.x; });
-    var pathD = "M " + sorted[0].x + " " + sorted[0].y;
-    for (var i=1;i<sorted.length;i++){
-      var prev = sorted[i-1], cur = sorted[i];
-      var mx = (prev.x+cur.x)/2;
-      pathD += " Q " + mx + " " + (prev.y - 20) + " " + cur.x + " " + cur.y;
-    }
-    if (state.fenceOn){
-      parts.push('<path d="'+pathD+'" stroke="#3A4A40" stroke-width="1.6" fill="none" stroke-dasharray="4 6"/>');
+    var sorted = mappable.slice().sort(function(a,b){ return a.x - b.x; });
+    if (sorted.length){
+      var pathD = "M " + sorted[0].x + " " + sorted[0].y;
+      for (var i=1;i<sorted.length;i++){
+        var prev = sorted[i-1], cur = sorted[i];
+        var mx = (prev.x+cur.x)/2;
+        pathD += " Q " + mx + " " + (prev.y - 20) + " " + cur.x + " " + cur.y;
+      }
+      if (state.fenceOn){
+        parts.push('<path d="'+pathD+'" stroke="#3A4A40" stroke-width="1.6" fill="none" stroke-dasharray="4 6"/>');
+      }
     }
 
-    cameras.forEach(function(cam){
+    mappable.forEach(function(cam){
       var color = cam.status === "online" ? "#4FA8A2" : cam.status === "alert" ? "#D99A3E" : "#6B7C71";
       var selected = cam.id === state.selectedCameraId;
       parts.push('<g class="node" data-cam="'+cam.id+'" tabindex="0" role="button" aria-label="'+cam.name+', '+cam.status+'">');
@@ -756,18 +939,31 @@
       strip.innerHTML = '<div class="empty">Select a camera on the map or from the list to view its status.</div>';
       return;
     }
+    var isWebcam = cam.type === "webcam";
     var recentAlerts = state.alerts.filter(function(a){ return a.cameraId === cam.id; }).length;
+    var streamVal = isWebcam ? "Local browser device (getUserMedia)" : ("rtsp://10.4."+cam.id.slice(-2)+".11:554/live");
+
+    var actionsHtml;
+    if (isWebcam){
+      var running = !!webcamState.stream;
+      actionsHtml =
+        '<button class="btn" data-action="webcam-start" '+(running?'disabled':'')+'>Start camera</button>'+
+        '<button class="btn" data-action="webcam-stop" '+(running?'':'disabled')+'>Stop camera</button>'+
+        '<button class="btn" data-action="webcam-reconnect">Reconnect camera</button>'+
+        '<button class="btn" data-action="webcam-remove">Remove camera</button>';
+    } else {
+      actionsHtml = (cam.status === "offline"
+        ? '<button class="btn" data-action="ping" data-cam="'+cam.id+'">Attempt reconnect</button>'
+        : '<button class="btn" data-action="mark-offline" data-cam="'+cam.id+'">Simulate feed loss</button>');
+    }
+
     strip.innerHTML =
       '<div class="d-field"><label>Camera</label><div class="val">'+cam.name+'</div></div>'+
       '<div class="d-field"><label>Sector</label><div class="val">'+cam.sector+'</div></div>'+
       '<div class="d-field"><label>Status</label><div class="val"><span class="pill '+cam.status+'">'+cam.status+'</span></div></div>'+
-      '<div class="d-field"><label>Stream</label><div class="val mono">rtsp://10.4.'+cam.id.slice(-2)+'.11:554/live</div></div>'+
+      '<div class="d-field"><label>Stream</label><div class="val mono">'+streamVal+'</div></div>'+
       '<div class="d-field"><label>Logged events</label><div class="val">'+recentAlerts+'</div></div>'+
-      '<div class="d-actions">'+
-        (cam.status === "offline"
-          ? '<button class="btn" data-action="ping" data-cam="'+cam.id+'">Attempt reconnect</button>'
-          : '<button class="btn" data-action="mark-offline" data-cam="'+cam.id+'">Simulate feed loss</button>')+
-      '</div>';
+      '<div class="d-actions">'+actionsHtml+'</div>';
   }
 
   /* ============ RENDER: ALERT FEED ============ */
@@ -1000,12 +1196,30 @@
     renderMap();
   });
 
+  byId("connectWebcamBtn").addEventListener("click", function(){
+    connectWebcam();
+  });
+
   byId("detailStrip").addEventListener("click", function(e){
     var btn = e.target.closest("button[data-action]");
     if (!btn) return;
+    var action = btn.getAttribute("data-action");
+
+    if (action === "webcam-start" || action === "webcam-reconnect"){
+      connectWebcam();
+      return;
+    }
+    if (action === "webcam-stop"){
+      stopWebcam();
+      return;
+    }
+    if (action === "webcam-remove"){
+      removeWebcamCamera();
+      return;
+    }
+
     var cam = cameraById(btn.getAttribute("data-cam"));
     if (!cam) return;
-    var action = btn.getAttribute("data-action");
     if (action === "mark-offline"){
       cam.status = "offline";
       showToast(cam.id + " feed lost — camera health alert raised.");
@@ -1078,6 +1292,8 @@
     tickClock();
     setInterval(tick, 1000);
     scheduleNextAlert();
+    // Note: webcam permission is never requested here — only in response to
+    // an explicit "+ Connect Webcam" / "Start camera" / "Reconnect camera" click.
   }
 
   init();
