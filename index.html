@@ -158,6 +158,15 @@
   .tbtn:hover{ border-color:var(--text-dim); color:var(--text); }
   .tbtn.active{ border-color:var(--teal); color:var(--teal); }
 
+  .motion-indicator{
+    position:absolute; top:16px; right:18px; z-index:3; display:none;
+    align-items:center; gap:8px; background:var(--surface); border:1px solid var(--border);
+    padding:6px 11px; border-radius:3px; font-family:'IBM Plex Mono',monospace; font-size:11px;
+    color:var(--text-dim);
+  }
+  .motion-indicator .m-bar{ width:54px; height:4px; border-radius:2px; background:var(--border-soft); overflow:hidden; }
+  .motion-indicator .m-fill{ height:100%; width:0%; background:var(--teal); border-radius:2px; transition:width .15s ease, background .15s ease; }
+
   #feedCanvas{ width:100%; height:100%; display:block; background:#0B100D; }
   #webcamVideo{ width:100%; height:100%; display:none; background:#0B100D; object-fit:cover; }
 
@@ -312,6 +321,10 @@
           <button class="tbtn" id="backToMapBtn" style="display:none;">&larr; Back to map</button>
           <button class="tbtn active" data-fence="1" id="fenceToggle" aria-pressed="true">Virtual fence: on</button>
         </div>
+        <div class="motion-indicator" id="motionIndicator">
+          <span id="motionLabel">Motion: 0%</span>
+          <span class="m-bar"><span class="m-fill" id="motionFill"></span></span>
+        </div>
         <svg id="mapSvg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Perimeter map with camera positions"></svg>
         <canvas id="feedCanvas" width="700" height="500" style="display:none;"></canvas>
         <video id="webcamVideo" autoplay playsinline muted style="display:none;"></video>
@@ -398,7 +411,8 @@
   var WEBCAM_CAM_ID = "CAM-WEB-001";
   var WEBCAM_CAM_NAME = "Laptop Webcam";
   var webcamState = {
-    stream: null
+    stream: null,
+    frameBuffer: []   // rolling buffer of recent real webcam frames (data URLs), used as alert evidence
   };
 
   /* ============ HELPERS ============ */
@@ -434,11 +448,12 @@
     }
   }
 
-  /* ============ ALERT GENERATION ============ */
+  /* ============ ALERT GENERATION (simulated cameras) ============ */
 
   function generateAlert(){
-    // The local webcam isn't part of the perimeter/fence system, so it's
-    // excluded from the simulated alert generator.
+    // The local webcam isn't part of the perimeter/fence system and has its
+    // own real motion-based trigger (see WEBCAM MOTION DETECTION below), so
+    // it's excluded from the simulated alert generator.
     var onlineCams = cameras.filter(function(c){ return c.status !== "offline" && c.type !== "webcam"; });
     if (onlineCams.length === 0) return null;
     var cam = pick(onlineCams);
@@ -467,6 +482,18 @@
     return alertObj;
   }
 
+  function pushAlertToFeed(alertObj){
+    state.alerts.unshift(alertObj);
+    if (state.alerts.length > 60) state.alerts.pop();
+    state.lastNewAlertId = alertObj.id;
+    renderAll();
+    var cam = cameraById(alertObj.cameraId);
+    showToast("New alert: " + alertObj.type + " — " + (cam ? cam.name : alertObj.cameraId));
+    setTimeout(function(){
+      if (state.lastNewAlertId === alertObj.id) state.lastNewAlertId = null;
+    }, 1700);
+  }
+
   function revertExpiredCameraAlerts(){
     var now = Date.now();
     cameras.forEach(function(c){
@@ -478,13 +505,15 @@
   }
 
   /* ============ SIMULATED CAMERA FEED ============ */
-  /* There is no real video source in this prototype. This renders a small,
-     deterministic synthetic scene per camera (per-camera seeded so each one
-     looks distinct) onto a canvas, and is also used to generate the
-     "recorded evidence" frames attached to each alert. It is labeled
-     "SIMULATED FEED" on-screen so it's never mistaken for a live stream.
+  /* There is no real video source for the fixed perimeter cameras in this
+     prototype. This renders a small, deterministic synthetic scene per
+     camera (per-camera seeded so each one looks distinct) onto a canvas,
+     and is also used to generate the "recorded evidence" frames attached
+     to each simulated-camera alert. It is labeled "SIMULATED FEED" on-screen
+     so it's never mistaken for a live stream.
      (The one exception is the real webcam feed, which is rendered through
-     its own <video> element — see renderCenterView.) */
+     its own <video> element and analyzed for real motion — see
+     renderCenterView and the WEBCAM MOTION DETECTION section.) */
 
   function hashStr(s){
     var h = 0;
@@ -619,6 +648,7 @@
     var video = byId("webcamVideo");
     var fenceBtn = byId("fenceToggle");
     var backBtn = byId("backToMapBtn");
+    var motionEl = byId("motionIndicator");
 
     var selCam = state.selectedCameraId ? cameraById(state.selectedCameraId) : null;
     var showLiveWebcam = !!(selCam && selCam.type === "webcam" && webcamState.stream);
@@ -639,6 +669,8 @@
         video.style.display = "block";
         stopFeedLoop();
         attachWebcamStreamToVideo();
+        motionEl.style.display = "flex";
+        if (!motionDet.active) startMotionDetection();
       } else {
         // Every other camera (including the webcam entry when it's not
         // currently streaming, e.g. stopped/offline) uses the existing
@@ -647,6 +679,8 @@
         video.srcObject = null;
         canvas.style.display = "block";
         startFeedLoop();
+        motionEl.style.display = "none";
+        stopMotionDetection();
       }
     } else {
       svg.style.display = "";
@@ -654,15 +688,19 @@
       video.style.display = "none";
       fenceBtn.style.display = "";
       backBtn.style.display = "none";
+      motionEl.style.display = "none";
       stopFeedLoop();
+      stopMotionDetection();
       renderMap();
     }
   }
 
   /* Generates a short sequence of "recorded" frames leading up to the alert
-     moment, using an offscreen canvas — this is what gets attached to the
-     alert as its saved evidence, independent of whether the operator was
-     viewing that camera when the alert fired. */
+     moment, using an offscreen canvas — this is what gets attached to a
+     simulated-camera alert as its saved evidence, independent of whether
+     the operator was viewing that camera when the alert fired. Real webcam
+     alerts use captureWebcamEvidence() instead (see below), built from
+     actual buffered video frames rather than the synthetic renderer. */
   function captureEvidenceClip(camId, atDate){
     var cam = cameraById(camId);
     var offscreen = document.createElement("canvas");
@@ -758,7 +796,7 @@
         ensureWebcamCameraEntry("online");
         selectWebcamInView();
         renderAll();
-        showToast("Laptop webcam connected.");
+        showToast("Laptop webcam connected. Watching for motion…");
       })
       .catch(function(err){
         var name = err && err.name;
@@ -781,11 +819,13 @@
   }
 
   function stopWebcam(){
+    stopMotionDetection();
     if (webcamState.stream){
       detachWebcamTrackHandlers(webcamState.stream);
       webcamState.stream.getTracks().forEach(function(track){ track.stop(); });
       webcamState.stream = null;
     }
+    webcamState.frameBuffer = [];
     var video = byId("webcamVideo");
     if (video) video.srcObject = null;
     var cam = getWebcamCamera();
@@ -806,13 +846,169 @@
     showToast("Laptop webcam removed.");
   }
 
-  /* ---- Future AI integration hook ----
-     Intentionally unimplemented for now — no frame analysis happens today.
-     Once a real detection pipeline exists, sample frames from #webcamVideo
-     (e.g. draw to an offscreen canvas on an interval and read the pixel
-     data) and pass each one through this function. */
-  function processVideoFrame(frame){
-    // no-op placeholder, reserved for future AI video-analysis integration
+  /* ============ WEBCAM MOTION DETECTION ============ */
+  /* Real, on-device frame-differencing motion detection over the actual
+     webcam <video> element — no data leaves the browser tab. This replaces
+     the earlier "future AI integration" placeholder with a working (if
+     simple) detector: it downsamples successive frames to a tiny offscreen
+     canvas, compares luma values pixel-by-pixel, and treats a large-enough
+     fraction of changed pixels as motion. When motion is sustained across a
+     couple of samples (a small debounce to avoid tripping on webcam noise),
+     it raises a real alert on the webcam "camera", with evidence built from
+     actual recent frames pulled off the live video — not synthetic ones. */
+
+  var MOTION_SAMPLE_MS   = 180;   // how often we sample the video for motion
+  var MOTION_THRESHOLD   = 0.05;  // fraction of sampled pixels that must change to count as "motion"
+  var MOTION_DEBOUNCE    = 2;     // consecutive over-threshold samples required before alerting
+  var MOTION_COOLDOWN_MS = 8000;  // minimum gap between webcam alerts
+  var EVIDENCE_CAPTURE_MS = 450;  // how often we buffer a real frame for evidence
+
+  var motionDet = {
+    active: false,
+    canvas: null,
+    ctx: null,
+    timer: null,
+    prevData: null,
+    consecutiveHits: 0,
+    cooldownUntil: 0
+  };
+
+  var evidenceBuf = {
+    canvas: null,
+    ctx: null,
+    lastCapture: 0
+  };
+
+  function startMotionDetection(){
+    if (motionDet.active) return;
+    var c = document.createElement("canvas");
+    c.width = 80; c.height = 60; // small on purpose: fast to sample, plenty for coarse motion
+    motionDet.canvas = c;
+    motionDet.ctx = c.getContext("2d", { willReadFrequently:true });
+    motionDet.prevData = null;
+    motionDet.consecutiveHits = 0;
+    motionDet.active = true;
+
+    if (!evidenceBuf.canvas){
+      evidenceBuf.canvas = document.createElement("canvas");
+      evidenceBuf.canvas.width = 320; evidenceBuf.canvas.height = 200;
+      evidenceBuf.ctx = evidenceBuf.canvas.getContext("2d");
+    }
+
+    motionLoop();
+  }
+
+  function stopMotionDetection(){
+    motionDet.active = false;
+    if (motionDet.timer){ clearTimeout(motionDet.timer); motionDet.timer = null; }
+    motionDet.prevData = null;
+    updateMotionIndicator(0);
+  }
+
+  function motionLoop(){
+    if (!motionDet.active) return;
+    motionDet.timer = setTimeout(function(){
+      sampleMotionFrame();
+      motionLoop();
+    }, MOTION_SAMPLE_MS);
+  }
+
+  function sampleMotionFrame(){
+    var video = byId("webcamVideo");
+    if (!video || !webcamState.stream || video.readyState < 2 || !video.videoWidth) return;
+
+    // Keep a rolling buffer of real recent frames so a triggered alert has
+    // actual footage to attach, regardless of exactly which sample tripped it.
+    bufferWebcamEvidenceFrame(video);
+
+    var ctx = motionDet.ctx;
+    ctx.drawImage(video, 0, 0, motionDet.canvas.width, motionDet.canvas.height);
+    var frame = ctx.getImageData(0, 0, motionDet.canvas.width, motionDet.canvas.height);
+
+    if (motionDet.prevData){
+      var score = computeMotionScore(motionDet.prevData.data, frame.data);
+      updateMotionIndicator(score);
+
+      if (score > MOTION_THRESHOLD){
+        motionDet.consecutiveHits++;
+      } else {
+        motionDet.consecutiveHits = 0;
+      }
+
+      var now = Date.now();
+      if (motionDet.consecutiveHits >= MOTION_DEBOUNCE && now >= motionDet.cooldownUntil){
+        triggerWebcamMotionAlert(score);
+        motionDet.cooldownUntil = now + MOTION_COOLDOWN_MS;
+        motionDet.consecutiveHits = 0;
+      }
+    }
+    motionDet.prevData = frame;
+  }
+
+  // Fraction (0..1) of sampled pixels whose luma changed more than a small
+  // per-pixel threshold between two frames. Cheap and noisy by design —
+  // this is a demo detector, not a production computer-vision pipeline.
+  function computeMotionScore(prev, cur){
+    var changed = 0, sampled = 0;
+    for (var i=0; i<prev.length; i+=16){ // stride over RGBA data for speed
+      var lumaPrev = prev[i]*0.299 + prev[i+1]*0.587 + prev[i+2]*0.114;
+      var lumaCur  = cur[i]*0.299  + cur[i+1]*0.587  + cur[i+2]*0.114;
+      if (Math.abs(lumaPrev - lumaCur) > 25) changed++;
+      sampled++;
+    }
+    return sampled ? changed / sampled : 0;
+  }
+
+  function updateMotionIndicator(score){
+    var label = byId("motionLabel");
+    var fill = byId("motionFill");
+    if (!label || !fill) return;
+    var pct = Math.round(score * 100);
+    label.textContent = "Motion: " + pct + "%";
+    fill.style.width = Math.min(100, pct * 4) + "%"; // visually amplified so small motion is still visible
+    fill.style.background = score > MOTION_THRESHOLD ? "var(--amber)" : "var(--teal)";
+  }
+
+  function bufferWebcamEvidenceFrame(video){
+    var now = Date.now();
+    if (now - evidenceBuf.lastCapture < EVIDENCE_CAPTURE_MS) return;
+    evidenceBuf.lastCapture = now;
+    evidenceBuf.ctx.drawImage(video, 0, 0, evidenceBuf.canvas.width, evidenceBuf.canvas.height);
+    var dataUrl = evidenceBuf.canvas.toDataURL("image/jpeg", 0.62);
+    webcamState.frameBuffer.push(dataUrl);
+    if (webcamState.frameBuffer.length > 5) webcamState.frameBuffer.shift();
+  }
+
+  function triggerWebcamMotionAlert(score){
+    var cam = getWebcamCamera();
+    if (!cam) return;
+
+    // Map the raw pixel-change fraction onto the console's 0–99 threat-score
+    // scale used everywhere else, just like the simulated cameras.
+    var threatScore = Math.max(20, Math.min(97, Math.round(score * 480)));
+    var severity = threatScore >= 70 ? "high" : threatScore >= 45 ? "med" : "low";
+    var type = severity === "high" ? "Motion detected — high intensity"
+             : severity === "med"  ? "Motion detected in frame"
+             : "Minor movement detected";
+
+    var alertObj = {
+      id: "A" + (state.nextAlertId++),
+      cameraId: cam.id,
+      type: type,
+      severity: severity,
+      score: threatScore,
+      ts: new Date(),
+      acknowledged: false,
+      evidence: {
+        frames: webcamState.frameBuffer.slice(),   // real frames pulled off the live video
+        capturedAt: new Date()
+      }
+    };
+
+    cam.status = "alert";
+    cam._alertRevertAt = Date.now() + 14000;
+
+    pushAlertToFeed(alertObj);
   }
 
   /* ============ RENDER: HEADER ============ */
@@ -1062,7 +1258,7 @@
           '<h4>Recorded evidence</h4>'+
           (alertObj.evidence && alertObj.evidence.frames && alertObj.evidence.frames.length
             ? '<img id="evidenceImg" class="evidence-img" src="'+alertObj.evidence.frames[0]+'" alt="Recorded evidence for '+alertObj.id+'">'+
-              '<div class="alert-meta" style="margin-top:6px;">'+alertObj.evidence.frames.length+' frames saved automatically around '+fmtTime(alertObj.evidence.capturedAt)+' &middot; simulated feed, retained with this case</div>'
+              '<div class="alert-meta" style="margin-top:6px;">'+alertObj.evidence.frames.length+' frames saved automatically around '+fmtTime(alertObj.evidence.capturedAt)+' &middot; '+(cam && cam.type === "webcam" ? "live webcam capture, retained with this case" : "simulated feed, retained with this case")+'</div>'
             : '<div class="alert-meta">No evidence was saved for this event.</div>')+
         '</div>'+
         '<div class="case-section">'+
@@ -1251,7 +1447,7 @@
     onActivateKey(e, function(){ openCaseView(item.getAttribute("data-alert")); });
   });
 
-  /* ============ SIMULATED LIVE FEED ============ */
+  /* ============ SIMULATED LIVE FEED (fixed perimeter cameras) ============ */
 
   function scheduleNextAlert(){
     var delay = randInt(5000, 11000);
