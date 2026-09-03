@@ -631,8 +631,12 @@
       if (showLiveWebcam){
         // Real local webcam: show the live <video> element instead of the
         // synthetic canvas feed, and don't run the simulated draw loop.
+        // FIX: must explicitly set "block" — clearing to "" falls back to
+        // the stylesheet's base rule (#webcamVideo{ display:none }), which
+        // is what caused the video to stay hidden even though the stream
+        // was correctly attached.
         canvas.style.display = "none";
-        video.style.display = "";
+        video.style.display = "block";
         stopFeedLoop();
         attachWebcamStreamToVideo();
       } else {
@@ -641,7 +645,7 @@
         // simulated feed, which already renders a "NO SIGNAL" state.
         video.style.display = "none";
         video.srcObject = null;
-        canvas.style.display = "";
+        canvas.style.display = "block";
         startFeedLoop();
       }
     } else {
