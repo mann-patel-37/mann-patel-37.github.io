@@ -169,6 +169,26 @@
 
   #feedCanvas{ width:100%; height:100%; display:block; background:#0B100D; }
   #webcamVideo{ width:100%; height:100%; display:none; background:#0B100D; object-fit:cover; }
+  #aiOverlayCanvas{ position:absolute; inset:0; width:100%; height:100%; display:none; z-index:2; cursor:default; }
+  #aiOverlayCanvas.drawing{ cursor:crosshair; }
+
+  .ai-badge{
+    display:none; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:11px;
+    border:1px solid var(--border); background:var(--surface); padding:5px 10px; border-radius:3px; color:var(--text-dim);
+  }
+  .ai-badge .dot{ width:6px; height:6px; border-radius:50%; background:var(--text-dim); flex-shrink:0; }
+  .ai-badge.status-loading .dot{ background:var(--amber); animation:pulseDot 1s ease-in-out infinite; }
+  .ai-badge.status-ready .dot{ background:var(--teal); }
+  .ai-badge.status-error .dot{ background:var(--red); }
+  @keyframes pulseDot{ 0%,100%{ opacity:1; } 50%{ opacity:0.35; } }
+
+  .zone-controls{ display:none; align-items:center; gap:6px; }
+  .tbtn.zone-drawing{ border-color:var(--amber); color:var(--amber); background:var(--amber-dim); }
+  .zone-hint{
+    position:absolute; bottom:14px; left:50%; transform:translateX(-50%); z-index:3;
+    background:var(--surface); border:1px solid var(--amber); color:var(--amber);
+    font-size:11.5px; padding:6px 12px; border-radius:3px; display:none; font-family:'IBM Plex Mono',monospace;
+  }
 
   .alert-thumb{
     width:100%; display:block; margin-top:8px; border-radius:3px;
@@ -320,14 +340,21 @@
         <div class="map-toolbar">
           <button class="tbtn" id="backToMapBtn" style="display:none;">&larr; Back to map</button>
           <button class="tbtn active" data-fence="1" id="fenceToggle" aria-pressed="true">Virtual fence: on</button>
+          <span class="ai-badge" id="aiBadge"><span class="dot"></span><span id="aiBadgeText">AI: off</span></span>
+          <span class="zone-controls" id="zoneControls">
+            <button class="tbtn" id="drawZoneBtn" type="button">Draw restricted zone</button>
+            <button class="tbtn" id="clearZoneBtn" type="button">Clear zone</button>
+          </span>
         </div>
         <div class="motion-indicator" id="motionIndicator">
           <span id="motionLabel">Motion: 0%</span>
           <span class="m-bar"><span class="m-fill" id="motionFill"></span></span>
         </div>
+        <div class="zone-hint" id="zoneHint">Click to place points &middot; double-click to close the zone &middot; Esc to cancel</div>
         <svg id="mapSvg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Perimeter map with camera positions"></svg>
         <canvas id="feedCanvas" width="700" height="500" style="display:none;"></canvas>
         <video id="webcamVideo" autoplay playsinline muted style="display:none;"></video>
+        <canvas id="aiOverlayCanvas"></canvas>
         <div class="map-legend">
           <span><span class="legend-dot" style="background:var(--teal);"></span>Online</span>
           <span><span class="legend-dot" style="background:var(--amber);"></span>Active alert</span>
@@ -361,6 +388,16 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<!--
+  Real, in-browser AI object detection — no backend, no video upload, no
+  server-side inference. TensorFlow.js + the COCO-SSD model run entirely in
+  this tab; frames never leave the browser. If these fail to load (offline,
+  ad-blocker, CDN unreachable), the AI badge below reports "AI: unavailable"
+  and the console falls back to the existing frame-diff motion detector —
+  it never pretends a detection happened that didn't.
+-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.20.0/tf.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/coco-ssd/2.2.3/coco-ssd.min.js" crossorigin="anonymous"></script>
 <script>
 (function(){
   "use strict";
@@ -671,6 +708,7 @@
         attachWebcamStreamToVideo();
         motionEl.style.display = "flex";
         if (!motionDet.active) startMotionDetection();
+        if (!aiState.active) startAiDetection();
       } else {
         // Every other camera (including the webcam entry when it's not
         // currently streaming, e.g. stopped/offline) uses the existing
@@ -681,6 +719,7 @@
         startFeedLoop();
         motionEl.style.display = "none";
         stopMotionDetection();
+        stopAiDetection();
       }
     } else {
       svg.style.display = "";
@@ -691,6 +730,7 @@
       motionEl.style.display = "none";
       stopFeedLoop();
       stopMotionDetection();
+      stopAiDetection();
       renderMap();
     }
   }
@@ -796,7 +836,8 @@
         ensureWebcamCameraEntry("online");
         selectWebcamInView();
         renderAll();
-        showToast("Laptop webcam connected. Watching for motion…");
+        loadAiModel();
+        showToast("Laptop webcam connected. Loading AI detection model…");
       })
       .catch(function(err){
         var name = err && err.name;
@@ -820,6 +861,7 @@
 
   function stopWebcam(){
     stopMotionDetection();
+    stopAiDetection();
     if (webcamState.stream){
       detachWebcamTrackHandlers(webcamState.stream);
       webcamState.stream.getTracks().forEach(function(track){ track.stop(); });
@@ -1009,6 +1051,312 @@
     cam._alertRevertAt = Date.now() + 14000;
 
     pushAlertToFeed(alertObj);
+  }
+
+  /* ============ REAL AI OBJECT DETECTION (client-side, no backend) ============
+     Runs TensorFlow.js + COCO-SSD directly against the live <video> element.
+     This is genuine object detection — real bounding boxes, real class
+     labels, real confidence scores — not a simulation. It only ever runs
+     against the real webcam feed (never the synthetic perimeter cameras,
+     which stay clearly labeled "SIMULATED FEED"). If the model can't load,
+     the console reports that plainly instead of faking results. */
+
+  var AI_INFERENCE_FPS         = 4;      // capped inference rate so the tab stays responsive
+  var AI_CONFIDENCE_THRESHOLD  = 0.55;   // discard low-confidence detections
+  var AI_CLASSES = { person:1, car:1, truck:1, bus:1, motorcycle:1, bicycle:1 };
+
+  var TRACK_MATCH_MAX_DIST   = 0.18;   // normalized centroid distance to match a track frame-to-frame
+  var TRACK_STALE_MS         = 1500;   // drop a track once unmatched for this long
+  var INTRUSION_CONFIRM_HITS = 3;      // consecutive in-zone frames before an intrusion alert fires (avoids one-frame flicker)
+  var LOITER_DWELL_MS        = 8000;   // continuous dwell time inside a zone before a loitering alert fires
+  var AI_ALERT_COOLDOWN_MS   = 6000;   // per-track cooldown between alerts of the same kind
+
+  var aiState = {
+    model: null,
+    status: "idle",     // idle | loading | ready | error | unsupported
+    active: false,
+    timer: null,
+    tracks: [],
+    nextTrackId: 1,
+    lastFps: 0
+  };
+
+  var webcamZone = { points: [], drawing: false }; // normalized [0..1] polygon points on the webcam frame
+
+  function updateAiStatusUI(){
+    var badge = byId("aiBadge");
+    var text = byId("aiBadgeText");
+    if (!badge || !text) return;
+    badge.className = "ai-badge status-" + aiState.status;
+    badge.style.display = (aiState.status === "idle") ? "none" : "flex";
+    var labels = {
+      loading: "AI: loading model…",
+      ready: "AI active" + (aiState.active ? " · " + aiState.lastFps + " fps" : ""),
+      error: "AI: unavailable (motion fallback active)",
+      unsupported: "AI: unsupported in this browser"
+    };
+    text.textContent = labels[aiState.status] || "AI: off";
+  }
+
+  function loadAiModel(){
+    if (aiState.model || aiState.status === "loading") return;
+    if (typeof tf === "undefined" || typeof cocoSsd === "undefined"){
+      aiState.status = "error";
+      updateAiStatusUI();
+      return;
+    }
+    aiState.status = "loading";
+    updateAiStatusUI();
+    cocoSsd.load({ base: "lite_mobilenet_v2" }).then(function(model){
+      aiState.model = model;
+      aiState.status = "ready";
+      updateAiStatusUI();
+      showToast("AI object detection model loaded.");
+    }).catch(function(err){
+      aiState.status = "error";
+      updateAiStatusUI();
+      showToast("AI model failed to load — falling back to motion detection only.");
+    });
+  }
+
+  function startAiDetection(){
+    if (!aiState.model || aiState.status !== "ready") { loadAiModel(); }
+    aiState.active = true;
+    byId("zoneControls").style.display = "flex";
+    var overlay = byId("aiOverlayCanvas");
+    if (overlay) overlay.style.display = "block";
+    aiDetectLoop();
+  }
+
+  function stopAiDetection(){
+    aiState.active = false;
+    if (aiState.timer){ clearTimeout(aiState.timer); aiState.timer = null; }
+    aiState.tracks = [];
+    cancelZoneDrawing();
+    byId("zoneControls").style.display = "none";
+    var overlay = byId("aiOverlayCanvas");
+    if (overlay){
+      overlay.style.display = "none";
+      var ctx = overlay.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
+    }
+    updateAiStatusUI();
+  }
+
+  function aiDetectLoop(){
+    if (!aiState.active) return;
+    aiState.timer = setTimeout(function(){
+      runAiDetection().then(aiDetectLoop, aiDetectLoop);
+    }, 1000 / AI_INFERENCE_FPS);
+  }
+
+  function runAiDetection(){
+    var video = byId("webcamVideo");
+    if (!aiState.model || aiState.status !== "ready" || !video || video.readyState < 2 || !video.videoWidth){
+      return Promise.resolve();
+    }
+    var t0 = performance.now();
+    return aiState.model.detect(video).then(function(preds){
+      aiState.lastFps = Math.max(1, Math.round(1000 / Math.max(1, performance.now() - t0)));
+      var filtered = preds.filter(function(p){
+        return AI_CLASSES[p.class] && p.score >= AI_CONFIDENCE_THRESHOLD;
+      });
+      updateTracks(filtered, video.videoWidth, video.videoHeight);
+      evaluateZoneLogic();
+      drawAiOverlay(video);
+      updateAiStatusUI();
+    }).catch(function(){ /* a single failed inference shouldn't kill the loop */ });
+  }
+
+  // Lightweight nearest-centroid tracker. COCO-SSD gives per-frame detections
+  // with no identity, so this stitches them into short-lived tracks by
+  // matching each new detection to the closest existing track of the same
+  // class, within a normalized distance threshold. Good enough for dwell
+  // time and zone-crossing logic; not a production-grade tracker (no
+  // occlusion handling, no re-identification).
+  function updateTracks(preds, vw, vh){
+    var now = Date.now();
+    var used = {};
+    preds.forEach(function(p){
+      var cx = (p.bbox[0] + p.bbox[2] / 2) / vw;
+      var cy = (p.bbox[1] + p.bbox[3]) / vh; // bottom-center = feet, used as ground-plane anchor for zone tests
+      var best = null, bestDist = TRACK_MATCH_MAX_DIST;
+      aiState.tracks.forEach(function(tr, idx){
+        if (used[idx] || tr.class !== p.class) return;
+        var d = Math.hypot(tr.center[0] - cx, tr.center[1] - cy);
+        if (d < bestDist){ bestDist = d; best = idx; }
+      });
+      if (best !== null){
+        var tr = aiState.tracks[best];
+        tr.box = p.bbox; tr.center = [cx, cy]; tr.lastSeen = now; tr.score = p.score;
+        used[best] = true;
+      } else {
+        aiState.tracks.push({
+          id: "T" + (aiState.nextTrackId++), class: p.class, box: p.bbox, center: [cx, cy],
+          score: p.score, firstSeen: now, lastSeen: now,
+          inZoneSince: null, zoneHits: 0, lastIntrusionAlertAt: 0, lastLoiterAlertAt: 0
+        });
+      }
+    });
+    aiState.tracks = aiState.tracks.filter(function(tr){ return now - tr.lastSeen < TRACK_STALE_MS; });
+  }
+
+  // Standard ray-casting point-in-polygon test, normalized [0,1] coordinates.
+  function pointInPolygon(pt, poly){
+    var x = pt[0], y = pt[1], inside = false;
+    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++){
+      var xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+      var intersect = ((yi > y) !== (yj > y)) &&
+        (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-9) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  function evaluateZoneLogic(){
+    if (!state.fenceOn || webcamZone.points.length < 3) return;
+    var now = Date.now();
+    aiState.tracks.forEach(function(tr){
+      var inside = pointInPolygon(tr.center, webcamZone.points);
+      if (inside){
+        if (tr.inZoneSince === null) tr.inZoneSince = now;
+        tr.zoneHits++;
+        var dwell = now - tr.inZoneSince;
+        if (tr.zoneHits >= INTRUSION_CONFIRM_HITS && now - tr.lastIntrusionAlertAt > AI_ALERT_COOLDOWN_MS){
+          raiseAiAlert(tr, "high", (tr.class === "person" ? "Person" : "Vehicle") + " entered restricted zone");
+          tr.lastIntrusionAlertAt = now;
+        }
+        if (dwell >= LOITER_DWELL_MS && now - tr.lastLoiterAlertAt > AI_ALERT_COOLDOWN_MS){
+          raiseAiAlert(tr, "med", "Loitering in restricted zone (" + Math.round(dwell / 1000) + "s)");
+          tr.lastLoiterAlertAt = now;
+        }
+      } else {
+        tr.inZoneSince = null;
+        tr.zoneHits = 0;
+      }
+    });
+  }
+
+  function raiseAiAlert(tr, severity, label){
+    var cam = getWebcamCamera();
+    if (!cam) return;
+    var threatScore = Math.max(30, Math.min(98, Math.round(tr.score * 70) + (severity === "high" ? 25 : 10)));
+    var alertObj = {
+      id: "A" + (state.nextAlertId++),
+      cameraId: cam.id,
+      type: label,
+      objectClass: tr.class,
+      confidence: tr.score,
+      severity: severity,
+      score: threatScore,
+      ts: new Date(),
+      acknowledged: false,
+      evidence: {
+        frames: webcamState.frameBuffer.slice(), // real frames from the live buffer, not synthetic
+        capturedAt: new Date()
+      }
+    };
+    cam.status = "alert";
+    cam._alertRevertAt = Date.now() + 14000;
+    pushAlertToFeed(alertObj);
+  }
+
+  function drawAiOverlay(video){
+    var overlay = byId("aiOverlayCanvas");
+    if (!overlay || overlay.style.display === "none") return;
+    var rect = overlay.getBoundingClientRect();
+    if (overlay.width !== rect.width) overlay.width = rect.width;
+    if (overlay.height !== rect.height) overlay.height = rect.height;
+    var ctx = overlay.getContext("2d");
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+    // object-fit:cover mapping from video-native pixels to the displayed box
+    var vw = video.videoWidth, vh = video.videoHeight;
+    var scale = Math.max(overlay.width / vw, overlay.height / vh);
+    var offX = (overlay.width - vw * scale) / 2;
+    var offY = (overlay.height - vh * scale) / 2;
+    function toScreen(x, y){ return [x * scale + offX, y * scale + offY]; }
+
+    aiState.tracks.forEach(function(tr){
+      var b = tr.box;
+      var p0 = toScreen(b[0], b[1]);
+      var p1 = toScreen(b[0] + b[2], b[1] + b[3]);
+      var inZone = webcamZone.points.length >= 3 && pointInPolygon(tr.center, webcamZone.points);
+      ctx.strokeStyle = inZone ? "#C4573F" : "#4FA8A2";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(p0[0], p0[1], p1[0] - p0[0], p1[1] - p0[1]);
+      var label = tr.class + " " + Math.round(tr.score * 100) + "%";
+      ctx.font = "11px 'IBM Plex Mono', monospace";
+      var tw = ctx.measureText(label).width;
+      ctx.fillStyle = inZone ? "#C4573F" : "#4FA8A2";
+      ctx.fillRect(p0[0], p0[1] - 16, tw + 8, 16);
+      ctx.fillStyle = "#0B100D";
+      ctx.fillText(label, p0[0] + 4, p0[1] - 4);
+    });
+
+    if (webcamZone.points.length){
+      ctx.beginPath();
+      webcamZone.points.forEach(function(pt, i){
+        var s = toScreen(pt[0] * vw, pt[1] * vh);
+        if (i === 0) ctx.moveTo(s[0], s[1]); else ctx.lineTo(s[0], s[1]);
+      });
+      if (webcamZone.points.length >= 3 && !webcamZone.drawing) ctx.closePath();
+      ctx.strokeStyle = "#D99A3E";
+      ctx.lineWidth = 2;
+      ctx.setLineDash(webcamZone.drawing ? [5, 4] : []);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (webcamZone.points.length >= 3){
+        ctx.fillStyle = "rgba(217,154,62,0.12)";
+        ctx.fill();
+      }
+    }
+  }
+
+  /* ---- Zone (virtual fence) drawing on the real webcam feed ---- */
+
+  function startZoneDrawing(){
+    webcamZone.points = [];
+    webcamZone.drawing = true;
+    byId("aiOverlayCanvas").classList.add("drawing");
+    byId("drawZoneBtn").classList.add("zone-drawing");
+    byId("drawZoneBtn").textContent = "Drawing… (Esc to cancel)";
+    byId("zoneHint").style.display = "block";
+  }
+
+  function cancelZoneDrawing(){
+    webcamZone.drawing = false;
+    var overlay = byId("aiOverlayCanvas");
+    if (overlay) overlay.classList.remove("drawing");
+    var btn = byId("drawZoneBtn");
+    if (btn){ btn.classList.remove("zone-drawing"); btn.textContent = "Draw restricted zone"; }
+    var hint = byId("zoneHint");
+    if (hint) hint.style.display = "none";
+  }
+
+  function finishZoneDrawing(){
+    if (webcamZone.points.length < 3){
+      showToast("A zone needs at least 3 points — click to add more, or Esc to cancel.");
+      return;
+    }
+    cancelZoneDrawing();
+    showToast("Restricted zone saved. Real intrusion/loitering detection is now active for this area.");
+  }
+
+  function handleOverlayClick(e){
+    if (!webcamZone.drawing) return;
+    var overlay = byId("aiOverlayCanvas");
+    var video = byId("webcamVideo");
+    var rect = overlay.getBoundingClientRect();
+    var vw = video.videoWidth || rect.width, vh = video.videoHeight || rect.height;
+    var scale = Math.max(rect.width / vw, rect.height / vh);
+    var offX = (rect.width - vw * scale) / 2;
+    var offY = (rect.height - vh * scale) / 2;
+    var x = (e.clientX - rect.left - offX) / scale / vw;
+    var y = (e.clientY - rect.top - offY) / scale / vh;
+    x = Math.min(1, Math.max(0, x));
+    y = Math.min(1, Math.max(0, y));
+    webcamZone.points.push([x, y]);
   }
 
   /* ============ RENDER: HEADER ============ */
@@ -1386,6 +1734,23 @@
   byId("backToMapBtn").addEventListener("click", function(){
     state.mapView = "map";
     renderCenterView();
+  });
+
+  byId("drawZoneBtn").addEventListener("click", function(){
+    if (webcamZone.drawing) cancelZoneDrawing(); else startZoneDrawing();
+  });
+  byId("clearZoneBtn").addEventListener("click", function(){
+    webcamZone.points = [];
+    cancelZoneDrawing();
+    showToast("Restricted zone cleared.");
+  });
+  byId("aiOverlayCanvas").addEventListener("click", handleOverlayClick);
+  byId("aiOverlayCanvas").addEventListener("dblclick", function(e){
+    e.preventDefault();
+    finishZoneDrawing();
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape" && webcamZone.drawing) cancelZoneDrawing();
   });
 
   byId("fenceToggle").addEventListener("click", function(){
