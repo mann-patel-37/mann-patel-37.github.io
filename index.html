@@ -3,34 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sentinel Line — Operations Console (Prototype)</title>
+<title>Sentinel Line — Operations Console (v2 demo)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg: #0E1512;
-    --bg-soft: #121913;
-    --surface: #182019;
-    --surface-2: #1C2620;
-    --border: #2A352E;
-    --border-soft: #212B24;
-    --text: #E7ECE5;
-    --text-muted: #8FA095;
-    --text-dim: #6B7C71;
-    --amber: #D99A3E;
-    --amber-dim: rgba(217,154,62,0.16);
-    --teal: #4FA8A2;
-    --teal-dim: rgba(79,168,162,0.16);
-    --red: #C4573F;
-    --red-dim: rgba(196,87,63,0.16);
+    --bg:#0E1512; --bg-soft:#121913; --surface:#182019; --surface-2:#1C2620;
+    --border:#2A352E; --border-soft:#212B24;
+    --text:#E7ECE5; --text-muted:#8FA095; --text-dim:#6B7C71;
+    --amber:#D99A3E; --amber-dim:rgba(217,154,62,0.16);
+    --teal:#4FA8A2; --teal-dim:rgba(79,168,162,0.16);
+    --red:#C4573F; --red-dim:rgba(196,87,63,0.18);
+    --focus:#E7ECE5;
   }
   *{ box-sizing:border-box; }
-  body{
-    margin:0; background:var(--bg); color:var(--text);
-    font-family:'IBM Plex Sans',sans-serif; font-size:14.5px;
-    -webkit-font-smoothing:antialiased;
-    height:100vh; overflow:hidden;
-  }
+  body{ margin:0; background:var(--bg); color:var(--text); font-family:'IBM Plex Sans',sans-serif; font-size:14.5px; -webkit-font-smoothing:antialiased; height:100vh; overflow:hidden; }
   h1,h2,h3,h4{ font-family:'Space Grotesk',sans-serif; font-weight:600; margin:0; letter-spacing:-0.01em; }
   .mono{ font-family:'IBM Plex Mono',monospace; }
   button{ font-family:inherit; cursor:pointer; }
@@ -38,240 +25,89 @@
   ::-webkit-scrollbar-track{ background:transparent; }
   ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:4px; }
 
-  /* Visible keyboard focus everywhere an interactive element got a custom look */
-  a:focus-visible, button:focus-visible, input:focus-visible,
-  .cam-row:focus-visible, .alert-item:focus-visible, .node:focus-visible{
-    outline: 2px solid var(--teal); outline-offset: 2px; border-radius:2px;
-  }
-  .cam-row, .alert-item{ outline-offset:-2px; }
-
-  .visually-hidden{
-    position:absolute; width:1px; height:1px; padding:0; margin:-1px;
-    overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+  /* Focus ring is deliberately distinct from the amber alert-pulse so keyboard
+     users never confuse "this is focused" with "this is alerting". */
+  a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible,
+  .cam-row:focus-visible, .alert-item:focus-visible, .node:focus-visible, .group-row:focus-visible{
+    outline: 2px solid var(--focus); outline-offset: 2px; border-radius:2px;
+    box-shadow: 0 0 0 4px rgba(231,236,229,0.15);
   }
 
   .hidden{ display:none !important; }
+  .visually-hidden{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 
-  /* ---------------- Modal overlay (admin sign-in / joined users) ---------------- */
-  .modal-overlay{
-    position:fixed; inset:0; background:rgba(6,9,7,0.72); z-index:40;
-    display:flex; align-items:center; justify-content:center; padding:24px;
-  }
-  .login-card{
-    width:100%; max-width:360px; background:var(--surface); border:1px solid var(--border);
-    border-radius:6px; padding:28px 26px;
-  }
-  .login-brand{ display:flex; align-items:center; gap:10px; margin-bottom:22px; }
-  .login-brand-name{ font-size:15px; font-family:'Space Grotesk',sans-serif; font-weight:600; }
-  .login-eyebrow{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.04em; color:var(--text-dim); margin:0 0 6px; }
-  .login-title{ font-size:18px; margin:0 0 18px; color:var(--text); }
-  .field-label{ font-size:12px; color:var(--text-muted); display:block; margin:0 0 6px; }
-  .field-input{
-    width:100%; background:var(--bg); border:1px solid var(--border); border-radius:4px;
-    color:var(--text); padding:10px 12px; font-size:14px; font-family:'IBM Plex Sans',sans-serif;
-  }
-  .field-input:focus{ outline:none; border-color:var(--teal); }
-  .login-btn{
-    margin-top:16px; width:100%; padding:10px 12px; border-radius:4px; border:1px solid var(--amber);
-    background:var(--amber-dim); color:var(--amber); font-size:14px; font-weight:500; cursor:pointer;
-  }
-  .login-btn:hover{ background:var(--amber); color:#191309; }
-  .login-error{ font-size:12.5px; color:var(--red); margin-top:10px; min-height:16px; }
-  .login-note{ font-size:11.5px; color:var(--text-dim); margin-top:18px; line-height:1.5; border-top:1px solid var(--border-soft); padding-top:14px; }
-  .login-close{
-    position:absolute; top:14px; right:14px; background:none; border:none;
-    color:var(--text-dim); font-size:18px; line-height:1; padding:4px 6px; border-radius:3px;
-  }
-  .login-close:hover{ color:var(--text); background:var(--surface-2); }
-
-  /* ---------------- Joined users panel ---------------- */
-  .users-card{
-    width:100%; max-width:420px; max-height:80vh; background:var(--surface); border:1px solid var(--border);
-    border-radius:6px; padding:22px 24px; display:flex; flex-direction:column; position:relative;
-  }
-  .users-title{ font-size:16px; margin-bottom:2px; }
-  .users-sub{ font-size:11.5px; color:var(--text-dim); margin-bottom:16px; }
-  .users-list{ overflow-y:auto; flex:1; margin:0 -8px; padding:0 8px; }
-  .user-row{
-    display:flex; align-items:center; gap:10px; padding:9px 0; border-top:1px solid var(--border-soft);
-  }
-  .user-row:first-child{ border-top:none; }
-  .user-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; background:var(--teal); }
-  .user-dot.idle{ background:var(--text-dim); }
-  .user-info{ flex:1; min-width:0; }
-  .user-name{ font-size:13.5px; color:var(--text); }
-  .user-meta{ font-size:11px; color:var(--text-dim); margin-top:2px; }
-  .role-badge{ font-size:10px; padding:2px 8px; border-radius:10px; font-weight:500; letter-spacing:0.02em; flex-shrink:0; }
-  .role-badge.admin{ background:var(--amber-dim); color:var(--amber); }
-  .role-badge.viewer{ background:rgba(107,124,113,0.18); color:var(--text-dim); }
-  .users-empty{ color:var(--text-dim); font-size:13px; padding:14px 0; }
-
-  /* ---------------- Shell ---------------- */
   .app{ display:flex; flex-direction:column; height:100vh; }
 
-  header{
-    display:flex; align-items:center; justify-content:space-between;
-    height:56px; padding:0 20px; border-bottom:1px solid var(--border-soft);
-    flex-shrink:0; background:var(--bg-soft); gap:12px;
-  }
+  header{ display:flex; align-items:center; justify-content:space-between; height:56px; padding:0 20px; border-bottom:1px solid var(--border-soft); flex-shrink:0; background:var(--bg-soft); gap:12px; }
   .brand{ display:flex; align-items:center; gap:10px; min-width:0; }
   .brand-name{ font-size:15.5px; white-space:nowrap; }
-  .status-strip{ display:flex; align-items:center; gap:22px; }
+  .status-strip{ display:flex; align-items:center; gap:20px; }
   .status-item{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text-muted); white-space:nowrap; }
   .status-item .dot{ width:6px; height:6px; border-radius:50%; }
   .clock{ font-family:'IBM Plex Mono'; font-size:12.5px; color:var(--text-dim); min-width:150px; text-align:right; }
-  .signout-btn{
-    background:transparent; border:1px solid var(--border); color:var(--text-dim);
-    border-radius:4px; padding:6px 11px; font-size:12px;
-  }
-  .signout-btn:hover{ color:var(--text); border-color:var(--text-dim); }
+  .focus-btn{ background:transparent; border:1px solid var(--border); color:var(--text-muted); border-radius:4px; padding:6px 12px; font-size:12px; }
+  .focus-btn:hover{ color:var(--text); border-color:var(--text-dim); }
+  .focus-btn.active{ border-color:var(--teal); color:var(--teal); background:var(--teal-dim); }
 
-  .body{ flex:1; display:grid; grid-template-columns: 280px 1fr 340px; min-height:0; }
-  @media (max-width: 1080px){ .body{ grid-template-columns: 240px 1fr 300px; } }
-
-  /* Non-admin users only get the webcam-connect option + the map/feed view —
-     the camera roster and the alert feed are admin-only. */
-  .body.viewer-mode{ grid-template-columns: 1fr; }
-  .body.viewer-mode #cameraPanel,
-  .body.viewer-mode #feedPanel{ display:none; }
-
-  .view-btn{
-    background:var(--teal-dim); border:1px solid var(--teal); color:var(--teal);
-    border-radius:4px; padding:4px 10px; font-size:11px; flex-shrink:0;
-  }
-  .view-btn:hover{ background:var(--teal); color:#0B100D; }
-  .live-dot{ width:6px; height:6px; border-radius:50%; background:var(--red); display:inline-block; margin-right:5px;
-    animation:pulseDot 1s ease-in-out infinite; }
-
-  /* Narrow / mobile: stack panels and allow the page to scroll instead of clipping content */
+  /* Layout: map is the dominant surface. Side panels shrink to rails in focus mode. */
+  .body{ flex:1; display:grid; grid-template-columns: 260px 1fr 320px; min-height:0; transition:grid-template-columns .18s ease; }
+  .body.focus-mode{ grid-template-columns: 0px 1fr 0px; }
+  .body.focus-mode .panel.side{ opacity:0; pointer-events:none; }
+  @media (max-width: 1080px){ .body{ grid-template-columns: 220px 1fr 280px; } }
   @media (max-width: 860px){
-    body{ height:auto; min-height:100vh; overflow-y:auto; overflow-x:hidden; }
+    body{ height:auto; min-height:100vh; overflow-y:auto; }
     .app{ height:auto; min-height:100vh; }
-    header{ height:auto; flex-wrap:wrap; padding:10px 16px; row-gap:8px; }
-    .status-strip{ flex-wrap:wrap; gap:14px; width:100%; justify-content:space-between; }
-    .clock{ text-align:left; min-width:0; }
     .body{ grid-template-columns:1fr; grid-auto-rows:auto; }
     .panel{ border-right:none; border-bottom:1px solid var(--border-soft); }
     .panel-body{ max-height:280px; }
-    .map-wrap{ height:320px; flex:none; }
-    #feedCanvas{ height:320px; }
-    .detail-strip{ flex-wrap:wrap; row-gap:10px; }
-    .d-actions{ margin-left:0; width:100%; }
+    .map-wrap{ height:340px; }
   }
 
-  /* ---------------- Panels ---------------- */
-  .panel{ border-right:1px solid var(--border-soft); display:flex; flex-direction:column; min-height:0; }
+  .panel{ border-right:1px solid var(--border-soft); display:flex; flex-direction:column; min-height:0; transition:opacity .15s ease; }
   .panel:last-child{ border-right:none; }
-  .panel-head{
-    padding:16px 18px 12px; border-bottom:1px solid var(--border-soft); flex-shrink:0;
-    display:flex; align-items:baseline; justify-content:space-between; gap:8px;
-  }
-  .panel-head h2{ font-size:13px; text-transform:none; color:var(--text-muted); font-weight:500; letter-spacing:0.02em; }
+  .panel-head{ padding:14px 18px 10px; border-bottom:1px solid var(--border-soft); flex-shrink:0; display:flex; align-items:baseline; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+  .panel-head h2{ font-size:13px; color:var(--text-muted); font-weight:500; letter-spacing:0.02em; }
   .panel-head .sub{ font-size:11px; color:var(--text-dim); }
-  .panel-body{ flex:1; overflow-y:auto; padding: 10px 0; }
+  .panel-body{ flex:1; overflow-y:auto; padding:8px 0; }
 
   /* ---------------- Camera list ---------------- */
-  .search-box{
-    margin:12px 18px 0; position:relative;
-  }
-  .search-box input{
-    width:100%; background:var(--surface); border:1px solid var(--border);
-    border-radius:3px; padding:8px 30px 8px 10px; color:var(--text); font-size:13px;
-    font-family:inherit;
-  }
+  .search-box{ margin:10px 18px 0; position:relative; }
+  .search-box input{ width:100%; background:var(--surface); border:1px solid var(--border); border-radius:3px; padding:8px 30px 8px 10px; color:var(--text); font-size:13px; font-family:inherit; }
   .search-box input:focus{ outline:none; border-color:var(--teal); }
-  .search-clear{
-    position:absolute; right:4px; top:50%; transform:translateY(-50%);
-    width:24px; height:24px; display:none; align-items:center; justify-content:center;
-    background:none; border:none; color:var(--text-dim); font-size:15px; border-radius:3px;
-  }
-  .search-clear:hover{ color:var(--text); background:var(--surface-2); }
+  .search-clear{ position:absolute; right:4px; top:50%; transform:translateY(-50%); width:24px; height:24px; display:none; align-items:center; justify-content:center; background:none; border:none; color:var(--text-dim); font-size:15px; border-radius:3px; }
   .search-clear.show{ display:flex; }
 
-  .filter-row{ display:flex; gap:6px; margin:10px 18px 4px; flex-wrap:wrap; }
-  .chip{
-    font-size:11.5px; padding:4px 9px; border-radius:12px; border:1px solid var(--border);
-    color:var(--text-dim); background:transparent; transition:all .12s ease;
-    display:inline-flex; align-items:center; gap:5px;
-  }
-  .chip .count{ color:var(--text-dim); font-family:'IBM Plex Mono'; font-size:10.5px; }
+  .filter-row{ display:flex; gap:6px; margin:10px 18px 0; flex-wrap:wrap; }
+  .chip{ font-size:11.5px; padding:4px 9px; border-radius:12px; border:1px solid var(--border); color:var(--text-dim); background:transparent; display:inline-flex; align-items:center; gap:5px; }
+  .chip .count{ font-family:'IBM Plex Mono'; font-size:10.5px; }
   .chip.active{ border-color:var(--teal); color:var(--teal); background:var(--teal-dim); }
   .chip.active .count{ color:var(--teal); }
+  .filter-label{ font-size:10.5px; color:var(--text-dim); margin:10px 18px 0; }
 
-  .cam-row{
-    display:flex; align-items:center; gap:10px; padding:9px 18px;
-    cursor:pointer; border-left:2px solid transparent;
-  }
+  .cam-row{ display:flex; align-items:center; gap:10px; padding:9px 18px; cursor:pointer; border-left:2px solid transparent; }
   .cam-row:hover{ background:var(--surface); }
   .cam-row.selected{ background:var(--surface); border-left-color:var(--teal); }
-  .cam-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-  .cam-dot.online{ background:var(--teal); }
-  .cam-dot.offline{ background:var(--text-dim); }
-  .cam-dot.alert{ background:var(--amber); box-shadow:0 0 0 3px var(--amber-dim); }
+  .cam-row.snoozed{ opacity:0.55; }
   .cam-info{ flex:1; min-width:0; }
   .cam-name{ font-size:13.5px; color:var(--text); }
   .cam-sector{ font-size:11px; color:var(--text-dim); }
   .cam-empty{ padding:20px 18px; color:var(--text-dim); font-size:13px; }
   .cam-empty button{ color:var(--teal); background:none; border:none; padding:0; font-size:13px; text-decoration:underline; }
 
+  /* Status = color + shape, never color alone */
+  .status-glyph{ width:12px; height:12px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  .status-glyph svg{ display:block; }
+  .snooze-tag{ font-size:9.5px; color:var(--amber); border:1px solid var(--amber); border-radius:8px; padding:1px 6px; flex-shrink:0; }
+
   /* ---------------- Map ---------------- */
   .map-wrap{ flex:1; position:relative; background:var(--bg); min-height:0; }
   .map-wrap svg{ width:100%; height:100%; display:block; }
-  .map-legend{
-    position:absolute; bottom:16px; left:18px; display:flex; gap:16px;
-    font-size:11.5px; color:var(--text-dim); flex-wrap:wrap;
-  }
+  .map-legend{ position:absolute; bottom:16px; left:18px; display:flex; gap:16px; font-size:11.5px; color:var(--text-dim); flex-wrap:wrap; }
   .map-legend span{ display:inline-flex; align-items:center; gap:6px; }
-  .legend-dot{ width:7px; height:7px; border-radius:50%; display:inline-block; }
-  .map-toolbar{
-    position:absolute; top:16px; left:18px; display:flex; gap:8px; z-index:3;
-  }
-  .tbtn{
-    background:var(--surface); border:1px solid var(--border); color:var(--text-muted);
-    font-size:12px; padding:6px 12px; border-radius:3px;
-  }
+  .map-toolbar{ position:absolute; top:16px; left:18px; display:flex; gap:8px; z-index:3; }
+  .tbtn{ background:var(--surface); border:1px solid var(--border); color:var(--text-muted); font-size:12px; padding:6px 12px; border-radius:3px; }
   .tbtn:hover{ border-color:var(--text-dim); color:var(--text); }
   .tbtn.active{ border-color:var(--teal); color:var(--teal); }
-
-  .motion-indicator{
-    position:absolute; top:16px; right:18px; z-index:3; display:none;
-    align-items:center; gap:8px; background:var(--surface); border:1px solid var(--border);
-    padding:6px 11px; border-radius:3px; font-family:'IBM Plex Mono',monospace; font-size:11px;
-    color:var(--text-dim);
-  }
-  .motion-indicator .m-bar{ width:54px; height:4px; border-radius:2px; background:var(--border-soft); overflow:hidden; }
-  .motion-indicator .m-fill{ height:100%; width:0%; background:var(--teal); border-radius:2px; transition:width .15s ease, background .15s ease; }
-
-  #feedCanvas{ width:100%; height:100%; display:block; background:#0B100D; }
-  #webcamVideo{ width:100%; height:100%; display:none; background:#0B100D; object-fit:cover; }
-  #aiOverlayCanvas{ position:absolute; inset:0; width:100%; height:100%; display:none; z-index:2; cursor:default; }
-  #aiOverlayCanvas.drawing{ cursor:crosshair; }
-
-  .ai-badge{
-    display:none; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:11px;
-    border:1px solid var(--border); background:var(--surface); padding:5px 10px; border-radius:3px; color:var(--text-dim);
-  }
-  .ai-badge .dot{ width:6px; height:6px; border-radius:50%; background:var(--text-dim); flex-shrink:0; }
-  .ai-badge.status-loading .dot{ background:var(--amber); animation:pulseDot 1s ease-in-out infinite; }
-  .ai-badge.status-ready .dot{ background:var(--teal); }
-  .ai-badge.status-error .dot{ background:var(--red); }
-  @keyframes pulseDot{ 0%,100%{ opacity:1; } 50%{ opacity:0.35; } }
-
-  .zone-controls{ display:none; align-items:center; gap:6px; }
-  .tbtn.zone-drawing{ border-color:var(--amber); color:var(--amber); background:var(--amber-dim); }
-  .zone-hint{
-    position:absolute; bottom:14px; left:50%; transform:translateX(-50%); z-index:3;
-    background:var(--surface); border:1px solid var(--amber); color:var(--amber);
-    font-size:11.5px; padding:6px 12px; border-radius:3px; display:none; font-family:'IBM Plex Mono',monospace;
-  }
-
-  .alert-thumb{
-    width:100%; display:block; margin-top:8px; border-radius:3px;
-    border:1px solid var(--border-soft); background:#000;
-  }
-  .evidence-img{
-    width:100%; display:block; border-radius:4px; border:1px solid var(--border); background:#000;
-  }
 
   @keyframes pulseRing{ 0%{ r:5; opacity:0.85; } 70%{ r:26; opacity:0; } 100%{ r:26; opacity:0; } }
   .node-pulse{ animation:pulseRing 2.4s ease-out infinite; }
@@ -279,26 +115,18 @@
   .node-label{ font-family:'IBM Plex Mono'; font-size:9.5px; fill:var(--text-dim); pointer-events:none; }
   @media (prefers-reduced-motion: reduce){ .node-pulse{ animation:none; } }
 
-  /* ---------------- Detail drawer (bottom of map) ---------------- */
-  .detail-strip{
-    border-top:1px solid var(--border-soft); background:var(--bg-soft);
-    padding:14px 20px; display:flex; gap:28px; align-items:center; flex-shrink:0;
-    min-height:76px;
-  }
+  /* ---------------- Detail strip ---------------- */
+  .detail-strip{ border-top:1px solid var(--border-soft); background:var(--bg-soft); padding:14px 20px; display:flex; gap:24px; align-items:center; flex-shrink:0; min-height:76px; flex-wrap:wrap; }
   .detail-strip .empty{ color:var(--text-dim); font-size:13px; }
   .d-field{ display:flex; flex-direction:column; gap:3px; }
   .d-field label{ font-size:10.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em; }
   .d-field .val{ font-size:13.5px; color:var(--text); }
-  .d-field .val.mono{ font-size:12.5px; }
   .pill{ font-size:11px; padding:3px 9px; border-radius:10px; display:inline-block; }
   .pill.online{ background:var(--teal-dim); color:var(--teal); }
   .pill.offline{ background:rgba(107,124,113,0.18); color:var(--text-dim); }
   .pill.alert{ background:var(--amber-dim); color:var(--amber); }
   .d-actions{ margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; }
-  .btn{
-    border:1px solid var(--border); background:transparent; color:var(--text);
-    padding:7px 14px; font-size:12.5px; border-radius:3px;
-  }
+  .btn{ border:1px solid var(--border); background:transparent; color:var(--text); padding:7px 14px; font-size:12.5px; border-radius:3px; }
   .btn:hover{ border-color:var(--text-dim); }
   .btn.primary{ background:var(--amber); border-color:var(--amber); color:#191309; font-weight:500; }
   .btn.primary:hover{ background:#e6ab52; }
@@ -311,19 +139,40 @@
   .fstat b{ display:block; font-family:'Space Grotesk'; font-size:19px; }
   .fstat span{ font-size:10.5px; color:var(--text-dim); }
 
-  .feed-legend{ display:flex; gap:12px; padding:0 18px 12px; font-size:11px; color:var(--text-dim); flex-wrap:wrap; }
-  .feed-legend span{ display:inline-flex; align-items:center; gap:5px; }
+  .bulk-bar{ display:flex; align-items:center; justify-content:space-between; padding:0 18px 10px; gap:8px; }
+  .bulk-bar .left{ font-size:11.5px; color:var(--text-dim); }
 
-  .alert-item{
-    padding:12px 18px; border-bottom:1px solid var(--border-soft);
-    cursor:pointer; transition:background .12s ease; position:relative;
-  }
+  /* Backpressure notice when alerts are queued instead of flooding in */
+  .queue-note{ margin:0 18px 10px; font-size:11.5px; color:var(--amber); background:var(--amber-dim); border:1px solid var(--amber); border-radius:4px; padding:7px 10px; display:none; }
+  .queue-note.show{ display:block; }
+
+  /* Grouped alert row — a collapsed cluster of similar events */
+  .group-row{ margin:0 12px 8px; border:1px solid var(--border); border-radius:5px; overflow:hidden; }
+  .group-head{ display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; background:var(--surface); }
+  .group-head:hover{ background:var(--surface-2); }
+  .group-count{ font-family:'IBM Plex Mono'; font-size:11px; background:var(--surface-2); border-radius:10px; padding:2px 8px; color:var(--text-muted); }
+  .group-title{ flex:1; font-size:13px; }
+  .group-chevron{ color:var(--text-dim); font-size:11px; transition:transform .12s ease; }
+  .group-row.open .group-chevron{ transform:rotate(90deg); }
+  .group-children{ display:none; }
+  .group-row.open .group-children{ display:block; }
+
+  /* Severity drives visual weight, not just a badge color */
+  .alert-item{ padding:12px 18px; border-bottom:1px solid var(--border-soft); cursor:pointer; transition:background .12s ease; position:relative; display:flex; gap:10px; }
   .alert-item:hover{ background:var(--surface); }
   .alert-item.selected{ background:var(--surface-2); }
-  .alert-item.ack{ opacity:0.5; }
+  .alert-item.ack{ opacity:0.45; }
   .alert-item.is-new{ animation:newAlertFlash 1.6s ease-out; }
   @keyframes newAlertFlash{ 0%{ background:var(--teal-dim); } 100%{ background:transparent; } }
   @media (prefers-reduced-motion: reduce){ .alert-item.is-new{ animation:none; } }
+
+  .alert-item.sev-high{ border-left:3px solid var(--red); background:linear-gradient(90deg, var(--red-dim), transparent 40%); }
+  .alert-item.sev-high.ack{ background:none; }
+  .alert-item.sev-med{ border-left:3px solid var(--amber); }
+  .alert-item.sev-low{ border-left:3px solid var(--border); }
+
+  .alert-check{ margin-top:2px; flex-shrink:0; }
+  .alert-main{ flex:1; min-width:0; }
   .alert-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .sev-badge{ font-size:10px; padding:2px 7px; border-radius:3px; font-weight:500; letter-spacing:0.02em; }
   .sev-badge.high{ background:var(--red-dim); color:var(--red); }
@@ -331,84 +180,45 @@
   .sev-badge.low{ background:var(--teal-dim); color:var(--teal); }
   .alert-time{ font-family:'IBM Plex Mono'; font-size:11px; color:var(--text-dim); }
   .alert-type{ font-size:13.5px; color:var(--text); margin-top:6px; }
+  .alert-item.sev-high .alert-type{ font-size:14.5px; font-weight:600; }
   .alert-meta{ font-size:11.5px; color:var(--text-dim); margin-top:3px; }
   .alert-score{ display:flex; align-items:center; gap:6px; margin-top:8px; }
   .score-bar{ flex:1; height:3px; background:var(--border-soft); border-radius:2px; overflow:hidden; }
   .score-fill{ height:100%; border-radius:2px; }
   .score-num{ font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--text-dim); width:24px; text-align:right; }
-  .alert-actions{ display:flex; justify-content:flex-end; margin-top:8px; }
-
+  .alert-actions{ display:flex; justify-content:flex-end; gap:6px; margin-top:8px; }
   .empty-feed{ padding:24px 18px; color:var(--text-dim); font-size:13px; text-align:center; }
 
-  /* ---------------- Case panel (modal-ish, slides from right within alert panel) ---------------- */
-  .case-panel{
-    position:absolute; inset:0; background:var(--bg); z-index:5;
-    display:flex; flex-direction:column;
-  }
-  .case-head{
-    padding:16px 18px; border-bottom:1px solid var(--border-soft);
-    display:flex; align-items:center; gap:10px; flex-shrink:0;
-  }
+  /* ---------------- Escalate modal (replaces the old "toast and forget") ---------------- */
+  .modal-overlay{ position:fixed; inset:0; background:rgba(6,9,7,0.72); z-index:40; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .modal-card{ width:100%; max-width:420px; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:24px 26px; }
+  .modal-card h3{ font-size:16px; margin-bottom:14px; }
+  .modal-row{ display:flex; justify-content:space-between; font-size:13px; padding:8px 0; border-top:1px solid var(--border-soft); }
+  .modal-row:first-of-type{ border-top:none; }
+  .modal-row label{ color:var(--text-dim); }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:18px; }
+  .esc-confirm{ display:none; margin-top:14px; font-size:12.5px; color:var(--teal); background:var(--teal-dim); border:1px solid var(--teal); border-radius:4px; padding:8px 10px; }
+
+  .case-panel{ position:absolute; inset:0; background:var(--bg); z-index:5; display:flex; flex-direction:column; }
+  .case-head{ padding:16px 18px; border-bottom:1px solid var(--border-soft); display:flex; align-items:center; gap:10px; flex-shrink:0; }
   .back-btn{ background:none; border:none; color:var(--text-muted); font-size:18px; padding:2px 6px; line-height:1; border-radius:3px; }
   .back-btn:hover{ color:var(--text); background:var(--surface); }
   .case-title{ font-size:14px; }
   .case-body{ flex:1; overflow-y:auto; padding:16px 18px; }
   .case-section{ margin-bottom:22px; }
   .case-section h4{ font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-dim); margin-bottom:10px; font-weight:500; }
+  .evidence-img{ width:100%; display:block; border-radius:4px; border:1px solid var(--border); background:#000; }
   .linked-event{ display:flex; gap:10px; padding:9px 0; border-top:1px solid var(--border-soft); }
   .linked-event:first-child{ border-top:none; }
   .linked-dot{ width:6px; height:6px; border-radius:50%; background:var(--teal); margin-top:6px; flex-shrink:0; }
   .linked-body .lt{ font-size:13px; color:var(--text); }
   .linked-body .ls{ font-size:11px; color:var(--text-dim); margin-top:2px; }
 
-  .toast{
-    position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(20px);
-    background:var(--surface-2); border:1px solid var(--border); color:var(--text);
-    padding:10px 18px; border-radius:4px; font-size:13px; opacity:0; pointer-events:none;
-    transition:opacity .2s ease, transform .2s ease; z-index:50;
-  }
+  .toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--surface-2); border:1px solid var(--border); color:var(--text); padding:10px 18px; border-radius:4px; font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s ease, transform .2s ease; z-index:50; }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
-
-<div class="modal-overlay hidden" id="adminModal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
-  <div class="login-card">
-    <button class="login-close" id="adminModalClose" type="button" aria-label="Close">&times;</button>
-    <div class="login-brand">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 2 L21 6.5 V12.5 C21 17.5 17.2 21.2 12 22.5 C6.8 21.2 3 17.5 3 12.5 V6.5 Z" stroke="#D99A3E" stroke-width="1.4"/>
-        <circle cx="12" cy="12" r="2.4" fill="#4FA8A2"/>
-      </svg>
-      <span class="login-brand-name">Sentinel Line</span>
-    </div>
-    <p class="login-eyebrow">RESTRICTED</p>
-    <h1 class="login-title" id="loginTitle">Admin sign-in</h1>
-    <label class="field-label" for="adminPw">Admin password</label>
-    <input class="field-input" id="adminPw" type="password" placeholder="Enter password" autocomplete="off">
-    <button class="login-btn" id="adminLoginBtn" type="button">Sign in</button>
-    <p class="login-error" id="loginError" role="alert" aria-live="assertive"></p>
-    <p class="login-note">Only the signed-in admin can see who's currently viewing this console and watch their connected webcams. This demo checks the password in the browser — swap in real server-side authentication before this handles anything sensitive.</p>
-  </div>
-</div>
-
-<div class="modal-overlay hidden" id="joinedUsersModal" role="dialog" aria-modal="true" aria-labelledby="usersTitle">
-  <div class="users-card">
-    <button class="login-close" id="joinedUsersModalClose" type="button" aria-label="Close">&times;</button>
-    <h2 class="users-title" id="usersTitle">Joined users</h2>
-    <p class="users-sub">Everyone with this console currently open, on any device.</p>
-    <div class="users-list" id="usersList"></div>
-  </div>
-</div>
-
-<div class="modal-overlay hidden" id="remoteWebcamModal" role="dialog" aria-modal="true" aria-labelledby="remoteWebcamTitle">
-  <div class="users-card" style="max-width:560px;">
-    <button class="login-close" id="remoteWebcamClose" type="button" aria-label="Close">&times;</button>
-    <h2 class="users-title" id="remoteWebcamTitle">Viewer webcam</h2>
-    <p class="users-sub" id="remoteWebcamSub">Connecting…</p>
-    <video id="remoteWebcamVideo" autoplay playsinline style="width:100%; border-radius:4px; background:#000; display:block;"></video>
-  </div>
-</div>
 
 <div class="app" id="appRoot">
   <header>
@@ -417,24 +227,19 @@
         <path d="M12 2 L21 6.5 V12.5 C21 17.5 17.2 21.2 12 22.5 C6.8 21.2 3 17.5 3 12.5 V6.5 Z" stroke="#D99A3E" stroke-width="1.4"/>
         <circle cx="12" cy="12" r="2.4" fill="#4FA8A2"/>
       </svg>
-      <span class="brand-name">Sentinel Line <span style="color:var(--text-dim); font-weight:400; font-size:12.5px;">— prototype console</span></span>
+      <span class="brand-name">Sentinel Line <span style="color:var(--text-dim); font-weight:400; font-size:12.5px;">— console v2</span></span>
     </div>
     <div class="status-strip">
-      <div class="status-item" id="onlineStat"><span class="dot" style="background:var(--teal);" aria-hidden="true"></span><span id="onlineCount">—</span> cameras online</div>
-      <div class="status-item" id="alertStat"><span class="dot" style="background:var(--amber);" aria-hidden="true"></span><span id="openAlertCount">—</span> open alerts</div>
+      <div class="status-item"><span class="dot" style="background:var(--teal);" aria-hidden="true"></span><span id="onlineCount">—</span> cameras online</div>
+      <div class="status-item"><span class="dot" style="background:var(--amber);" aria-hidden="true"></span><span id="openAlertCount">—</span> open alerts</div>
       <div class="clock mono" id="clock">—</div>
-      <button class="tbtn hidden" id="connectWebcamBtn" type="button">+ Connect Webcam</button>
-      <button class="tbtn" id="adminSigninBtn" type="button">Admin sign-in</button>
-      <button class="tbtn hidden" id="joinedUsersBtn" type="button">Joined users (<span id="joinedCount">0</span>)</button>
-      <button class="signout-btn hidden" id="signOutBtn" type="button">Sign out</button>
+      <button class="focus-btn" id="focusModeBtn" type="button" aria-pressed="false">Focus map</button>
     </div>
   </header>
 
   <div class="body" id="bodyGrid">
-    <div class="panel" id="cameraPanel">
-      <div class="panel-head">
-        <h2>Cameras</h2>
-      </div>
+    <div class="panel side" id="cameraPanel">
+      <div class="panel-head"><h2>Cameras</h2></div>
       <div class="search-box">
         <label class="visually-hidden" for="camSearch">Search cameras by name or sector</label>
         <input type="text" id="camSearch" placeholder="Search by name or sector…" autocomplete="off">
@@ -449,30 +254,16 @@
       <div class="panel-body" id="cameraList" role="listbox" aria-label="Camera list"></div>
     </div>
 
-    <div class="panel" id="mapPanel" style="border-right:1px solid var(--border-soft); display:flex; flex-direction:column;">
+    <div class="panel" id="mapPanel" style="display:flex; flex-direction:column;">
       <div class="map-wrap">
         <div class="map-toolbar">
-          <button class="tbtn" id="backToMapBtn" style="display:none;">&larr; Back to map</button>
           <button class="tbtn active" data-fence="1" id="fenceToggle" aria-pressed="true">Virtual fence: on</button>
-          <span class="ai-badge" id="aiBadge"><span class="dot"></span><span id="aiBadgeText">AI: off</span></span>
-          <span class="zone-controls" id="zoneControls">
-            <button class="tbtn" id="drawZoneBtn" type="button">Draw restricted zone</button>
-            <button class="tbtn" id="clearZoneBtn" type="button">Clear zone</button>
-          </span>
         </div>
-        <div class="motion-indicator" id="motionIndicator">
-          <span id="motionLabel">Motion: 0%</span>
-          <span class="m-bar"><span class="m-fill" id="motionFill"></span></span>
-        </div>
-        <div class="zone-hint" id="zoneHint">Click to place points &middot; double-click to close the zone &middot; Esc to cancel</div>
         <svg id="mapSvg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Perimeter map with camera positions"></svg>
-        <canvas id="feedCanvas" width="700" height="500" style="display:none;"></canvas>
-        <video id="webcamVideo" autoplay playsinline muted style="display:none;"></video>
-        <canvas id="aiOverlayCanvas"></canvas>
         <div class="map-legend">
-          <span><span class="legend-dot" style="background:var(--teal);"></span>Online</span>
-          <span><span class="legend-dot" style="background:var(--amber);"></span>Active alert</span>
-          <span><span class="legend-dot" style="background:var(--text-dim);"></span>Offline</span>
+          <span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#4FA8A2"/></svg>Online</span>
+          <span><svg width="10" height="10"><polygon points="5,0 10,9 0,9" fill="#D99A3E"/></svg>Active alert</span>
+          <span><svg width="10" height="10"><rect width="8" height="8" x="1" y="1" fill="#6B7C71" opacity="0.6"/></svg>Offline</span>
         </div>
       </div>
       <div class="detail-strip" id="detailStrip">
@@ -480,493 +271,67 @@
       </div>
     </div>
 
-    <div class="panel" id="feedPanel" style="position:relative;">
-      <div class="panel-head"><h2>Live alert feed</h2></div>
+    <div class="panel side" id="feedPanel" style="position:relative;">
+      <div class="panel-head">
+        <h2>Live alert feed</h2>
+        <span class="sub" id="queueSub"></span>
+      </div>
       <div class="feed-stats">
         <div class="fstat"><b id="statHigh">0</b><span>High severity</span></div>
         <div class="fstat"><b id="statOpen">0</b><span>Unacknowledged</span></div>
         <div class="fstat"><b id="statAvg">0</b><span>Avg. threat score</span></div>
       </div>
-      <div class="feed-legend">
-        <span><span class="legend-dot" style="background:var(--red);"></span>High</span>
-        <span><span class="legend-dot" style="background:var(--amber);"></span>Medium</span>
-        <span><span class="legend-dot" style="background:var(--teal);"></span>Low</span>
+      <div class="filter-row" id="sevFilters" role="group" aria-label="Filter alerts by severity">
+        <button class="chip active" data-sev="all" aria-pressed="true">All</button>
+        <button class="chip" data-sev="high" aria-pressed="false">High</button>
+        <button class="chip" data-sev="med" aria-pressed="false">Medium</button>
+        <button class="chip" data-sev="low" aria-pressed="false">Low</button>
       </div>
+      <div class="bulk-bar">
+        <span class="left" id="bulkLabel">0 selected</span>
+        <button class="btn small" id="bulkAckBtn" disabled>Acknowledge selected</button>
+      </div>
+      <div class="queue-note" id="queueNote"></div>
       <div class="panel-body" id="alertFeed"></div>
-
       <div class="case-panel" id="casePanel" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="escalateModal" role="dialog" aria-modal="true" aria-labelledby="escTitle">
+  <div class="modal-card">
+    <h3 id="escTitle">Escalate to Sector HQ</h3>
+    <div class="modal-row"><label>Case</label><span id="escCase" class="mono"></span></div>
+    <div class="modal-row"><label>Camera</label><span id="escCam"></span></div>
+    <div class="modal-row"><label>Sector</label><span id="escSector"></span></div>
+    <div class="modal-row"><label>Time</label><span id="escTime" class="mono"></span></div>
+    <div class="esc-confirm" id="escConfirm"></div>
+    <div class="modal-actions">
+      <button class="btn" id="escCancel">Cancel</button>
+      <button class="btn primary" id="escSend">Send to HQ</button>
     </div>
   </div>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<!--
-  Admin gate: a client-side password check only. This blocks casual access
-  in the demo but is NOT real security — anyone can read the password out of
-  this file's source. Swap in real server-side authentication (session
-  cookie, SSO, etc.) before this handles anything sensitive.
-
-  Everyone who opens this page lands in the console immediately as a
-  read-only "viewer" — no name or password needed. A viewer's console is
-  limited to the map/feed view and a "Connect Webcam" button; the camera
-  roster and alert feed are admin-only.
-
-  Presence + webcam relay run over this artifact's shared persistent
-  storage (window.storage, shared:true), which is the closest thing this
-  prototype has to a backend — there's no real server here. That storage
-  channel also carries WebRTC signaling (offers/answers/ICE candidates) so
-  the admin can watch a connected viewer's live webcam from a different
-  device. Only a public STUN server is configured (no TURN), so the video
-  call may fail to connect on strict corporate/mobile networks — it works
-  reliably on ordinary home/office connections.
--->
-<script>
-(function(){
-  "use strict";
-
-  var ADMIN_PASSWORD = "sentinel-admin"; // change this to set the admin password
-
-  var PRESENCE_PREFIX = "presence:";
-  var SIGNAL_PREFIX    = "signal:";
-  var HEARTBEAT_MS        = 5000;
-  var PRESENCE_STALE_MS   = 20000; // ~4 missed heartbeats before we consider a user gone
-  var ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
-
-  var role = "viewer"; // "viewer" | "admin"
-  var selfId = null;
-  var heartbeatHandle = null;
-  var storageOk = true;
-
-  function byId(id){ return document.getElementById(id); }
-
-  /* ---------------- shared storage helpers (best-effort; never fatal) ---------------- */
-
-  async function sget(key){
-    try {
-      var r = await window.storage.get(key, true);
-      return r ? JSON.parse(r.value) : null;
-    } catch (e){ return null; }
-  }
-  async function sset(key, val){
-    try { await window.storage.set(key, JSON.stringify(val), true); storageOk = true; return true; }
-    catch (e){ storageOk = false; return false; }
-  }
-  async function sdel(key){
-    try { await window.storage.delete(key, true); return true; } catch (e){ return false; }
-  }
-  async function slistKeys(prefix){
-    try {
-      var r = await window.storage.list(prefix, true);
-      return (r && r.keys) ? r.keys : [];
-    } catch (e){ return []; }
-  }
-
-  function getSelfId(){
-    if (selfId) return selfId;
-    var existing = null;
-    try { existing = window.sessionStorage.getItem("sentinelUserId"); } catch (e){ /* ignore */ }
-    if (existing){ selfId = existing; return selfId; }
-    selfId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID()
-      : ("u-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2,8));
-    try { window.sessionStorage.setItem("sentinelUserId", selfId); } catch (e){ /* ignore */ }
-    return selfId;
-  }
-
-  function autoViewerName(id){
-    return "Viewer " + id.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase();
-  }
-
-  function fmtRelative(ms){
-    var s = Math.max(0, Math.round((Date.now() - ms) / 1000));
-    if (s < 5) return "active now";
-    if (s < 60) return s + "s ago";
-    var m = Math.round(s / 60);
-    return m + "m ago";
-  }
-
-  /* ---------------- presence lifecycle (cross-device, via shared storage) ---------------- */
-
-  async function updateOwnPresence(){
-    var id = getSelfId();
-    var prior = await sget(PRESENCE_PREFIX + id);
-    await sset(PRESENCE_PREFIX + id, {
-      name: (prior && prior.name) || autoViewerName(id),
-      role: role,
-      joinedAt: (prior && prior.joinedAt) || Date.now(),
-      lastSeen: Date.now(),
-      webcamActive: !!(window.__sentinelWebcamIsActive && window.__sentinelWebcamIsActive())
-    });
-  }
-
-  async function removeOwnPresence(){
-    await sdel(PRESENCE_PREFIX + getSelfId());
-  }
-
-  async function fetchPresenceList(){
-    var keys = await slistKeys(PRESENCE_PREFIX);
-    var now = Date.now();
-    var out = [];
-    for (var i=0;i<keys.length;i++){
-      var id = keys[i].slice(PRESENCE_PREFIX.length);
-      var entry = await sget(keys[i]);
-      if (!entry) continue;
-      if (id !== selfId && now - entry.lastSeen > PRESENCE_STALE_MS) continue; // prune stale others; always show self
-      out.push(Object.assign({ id: id }, entry));
-    }
-    out.sort(function(a,b){
-      if (a.role !== b.role) return a.role === "admin" ? -1 : 1;
-      return a.joinedAt - b.joinedAt;
-    });
-    return out;
-  }
-
-  async function updateJoinedBadge(){
-    var list = await fetchPresenceList();
-    var el = byId("joinedCount");
-    if (el) el.textContent = String(list.length);
-    return list;
-  }
-
-  async function renderJoinedUsers(){
-    var list = byId("usersList");
-    if (!list) return;
-    var entries = await fetchPresenceList();
-    if (!storageOk){
-      list.innerHTML = '<div class="users-empty">Shared storage is unavailable right now, so presence can\'t be tracked.</div>';
-      return;
-    }
-    if (entries.length === 0){
-      list.innerHTML = '<div class="users-empty">No one is currently viewing this console.</div>';
-      return;
-    }
-    list.innerHTML = entries.map(function(e){
-      var isSelf = e.id === selfId;
-      var idle = Date.now() - e.lastSeen > HEARTBEAT_MS * 2;
-      var canView = role === "admin" && !isSelf && e.role === "viewer" && e.webcamActive;
-      return '<div class="user-row">'+
-        '<span class="user-dot'+(idle?' idle':'')+'"></span>'+
-        '<div class="user-info">'+
-          '<div class="user-name">'+e.name+(isSelf?' (you)':'')+(e.webcamActive?' <span class="live-dot" title="Webcam connected"></span>':'')+'</div>'+
-          '<div class="user-meta">Joined '+new Date(e.joinedAt).toLocaleTimeString()+' &middot; '+fmtRelative(e.lastSeen)+(e.webcamActive?' &middot; webcam connected':'')+'</div>'+
-        '</div>'+
-        '<span class="role-badge '+e.role+'">'+e.role+'</span>'+
-        (canView ? '<button class="view-btn" type="button" data-view-user="'+e.id+'" data-view-name="'+e.name+'">View</button>' : '')+
-      '</div>';
-    }).join("");
-  }
-
-  /* ---------------- role / UI gating ---------------- */
-
-  function updateRoleUI(){
-    var isAdmin = role === "admin";
-    byId("adminSigninBtn").classList.toggle("hidden", isAdmin);
-    byId("joinedUsersBtn").classList.toggle("hidden", !isAdmin);
-    byId("signOutBtn").classList.toggle("hidden", !isAdmin);
-    if (window.__sentinelSetRole) window.__sentinelSetRole(role);
-  }
-
-  /* ---------------- admin sign-in modal ---------------- */
-
-  function openAdminModal(){
-    byId("loginError").textContent = "";
-    byId("adminModal").classList.remove("hidden");
-    byId("adminPw").focus();
-  }
-  function closeAdminModal(){
-    byId("adminModal").classList.add("hidden");
-    byId("adminPw").value = "";
-    byId("loginError").textContent = "";
-  }
-
-  function attemptAdminLogin(){
-    var input = byId("adminPw");
-    var error = byId("loginError");
-    if (input.value === ADMIN_PASSWORD){
-      role = "admin";
-      updateOwnPresence();
-      updateRoleUI();
-      closeAdminModal();
-      if (window.__sentinelInit) window.__sentinelInit();
-    } else {
-      error.textContent = "Incorrect password.";
-    }
-  }
-
-  byId("adminSigninBtn").addEventListener("click", openAdminModal);
-  byId("adminModalClose").addEventListener("click", closeAdminModal);
-  byId("adminModal").addEventListener("click", function(e){
-    if (e.target === byId("adminModal")) closeAdminModal();
-  });
-  byId("adminLoginBtn").addEventListener("click", attemptAdminLogin);
-  byId("adminPw").addEventListener("keydown", function(e){
-    if (e.key === "Enter") attemptAdminLogin();
-  });
-  document.addEventListener("keydown", function(e){
-    if (e.key !== "Escape") return;
-    if (!byId("adminModal").classList.contains("hidden")) closeAdminModal();
-    if (!byId("joinedUsersModal").classList.contains("hidden")) closeJoinedUsersModal();
-    if (!byId("remoteWebcamModal").classList.contains("hidden")) closeRemoteWebcamModal();
-  });
-
-  byId("signOutBtn").addEventListener("click", function(){
-    closeRemoteWebcamModal();
-    if (window.__sentinelStopWebcam) window.__sentinelStopWebcam();
-    if (window.__sentinelRemoveWebcam) window.__sentinelRemoveWebcam();
-    role = "viewer";
-    updateOwnPresence();
-    updateRoleUI();
-    byId("joinedUsersModal").classList.add("hidden");
-  });
-
-  /* ---------------- joined users modal ---------------- */
-
-  var joinedUsersTimer = null;
-
-  function openJoinedUsersModal(){
-    if (role !== "admin") return;
-    renderJoinedUsers();
-    byId("joinedUsersModal").classList.remove("hidden");
-    clearInterval(joinedUsersTimer);
-    joinedUsersTimer = setInterval(renderJoinedUsers, HEARTBEAT_MS);
-  }
-  function closeJoinedUsersModal(){
-    byId("joinedUsersModal").classList.add("hidden");
-    clearInterval(joinedUsersTimer);
-  }
-
-  byId("joinedUsersBtn").addEventListener("click", openJoinedUsersModal);
-  byId("joinedUsersModalClose").addEventListener("click", closeJoinedUsersModal);
-  byId("joinedUsersModal").addEventListener("click", function(e){
-    if (e.target === byId("joinedUsersModal")) closeJoinedUsersModal();
-  });
-  byId("usersList").addEventListener("click", function(e){
-    var btn = e.target.closest("[data-view-user]");
-    if (!btn) return;
-    openRemoteWebcamModal(btn.getAttribute("data-view-user"), btn.getAttribute("data-view-name"));
-  });
-
-  /* ---------------- WebRTC: admin viewing a remote viewer's webcam ---------------- */
-
-  var viewerPc = null;
-  var viewerPollTimer = null;
-  var viewerTargetId = null;
-  var seenIceFromViewer = 0;
-
-  async function openRemoteWebcamModal(targetUserId, targetName){
-    closeRemoteWebcamModal();
-    viewerTargetId = targetUserId;
-    byId("remoteWebcamTitle").textContent = (targetName || "Viewer") + "'s webcam";
-    byId("remoteWebcamSub").textContent = "Connecting… (this can take a few seconds)";
-    byId("remoteWebcamModal").classList.remove("hidden");
-
-    var pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-    viewerPc = pc;
-    seenIceFromViewer = 0;
-
-    pc.ontrack = function(e){
-      var video = byId("remoteWebcamVideo");
-      if (video.srcObject !== e.streams[0]) video.srcObject = e.streams[0];
-      byId("remoteWebcamSub").textContent = "Live.";
-    };
-    pc.onicecandidate = function(e){
-      if (e.candidate) pushIceFromAdmin(targetUserId, selfId, e.candidate);
-    };
-    pc.onconnectionstatechange = function(){
-      if (pc.connectionState === "failed" || pc.connectionState === "disconnected"){
-        byId("remoteWebcamSub").textContent = "Connection lost (this can happen across strict networks without a TURN server).";
-      }
-    };
-
-    // ask the viewer's tab to make us an offer
-    await sset(signalKey(targetUserId, selfId, "request"), { by: selfId, ts: Date.now() });
-
-    viewerPollTimer = setInterval(async function(){
-      if (!viewerPc || viewerTargetId !== targetUserId) return;
-      var offerMsg = await sget(signalKey(targetUserId, selfId, "offer"));
-      if (offerMsg && !pc.currentRemoteDescription){
-        await pc.setRemoteDescription({ type: "offer", sdp: offerMsg.sdp });
-        var answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        await sset(signalKey(targetUserId, selfId, "answer"), { sdp: answer.sdp, ts: Date.now() });
-      }
-      var iceMsg = await sget(signalKey(targetUserId, selfId, "ice-from-viewer"));
-      if (iceMsg && iceMsg.list && iceMsg.list.length > seenIceFromViewer){
-        for (var i=seenIceFromViewer; i<iceMsg.list.length; i++){
-          try { await pc.addIceCandidate(iceMsg.list[i]); } catch (e){ /* ignore */ }
-        }
-        seenIceFromViewer = iceMsg.list.length;
-      }
-    }, 1500);
-  }
-
-  function closeRemoteWebcamModal(){
-    byId("remoteWebcamModal").classList.add("hidden");
-    clearInterval(viewerPollTimer);
-    viewerPollTimer = null;
-    var video = byId("remoteWebcamVideo");
-    if (video) video.srcObject = null;
-    if (viewerPc){ try { viewerPc.close(); } catch(e){} viewerPc = null; }
-    if (viewerTargetId) sdel(signalKey(viewerTargetId, selfId, "request"));
-    viewerTargetId = null;
-  }
-
-  byId("remoteWebcamClose").addEventListener("click", closeRemoteWebcamModal);
-  byId("remoteWebcamModal").addEventListener("click", function(e){
-    if (e.target === byId("remoteWebcamModal")) closeRemoteWebcamModal();
-  });
-
-  /* ---------------- WebRTC: this tab's own webcam, broadcast to any requesting admin ---------------- */
-  /* A viewer's webcam stays local (just their own preview) until an admin
-     opens "View" on them — at that point this tab answers the admin's
-     request by creating an offer for that specific admin. Multiple admins
-     can each get their own peer connection to the same webcam stream. */
-
-  function signalKey(viewerId, adminId, kind){
-    return SIGNAL_PREFIX + viewerId + ":" + adminId + ":" + kind;
-  }
-
-  var broadcastPeers = {};      // adminId -> { pc, handledRequestAt, seenIceFromAdmin }
-  var broadcastPollTimer = null;
-  var currentWebcamStream = null;
-
-  function webcamIsActive(){ return !!currentWebcamStream; }
-  window.__sentinelWebcamIsActive = webcamIsActive;
-
-  // ICE candidates are pushed to two distinct keys per (viewer, admin) pair
-  // so a candidate from either side can never overwrite the other's list.
-  async function pushIceFromAdmin(viewerId, adminId, candidate){
-    var key = signalKey(viewerId, adminId, "ice-from-admin");
-    var cur = (await sget(key)) || { list: [] };
-    cur.list.push(candidate);
-    await sset(key, cur);
-  }
-  async function pushIceFromViewerSide(viewerId, adminId, candidate){
-    var key = signalKey(viewerId, adminId, "ice-from-viewer");
-    var cur = (await sget(key)) || { list: [] };
-    cur.list.push(candidate);
-    await sset(key, cur);
-  }
-
-  function startBroadcastPolling(){
-    stopBroadcastPolling();
-    broadcastPollTimer = setInterval(pollForViewRequests, 1500);
-  }
-  function stopBroadcastPolling(){
-    if (broadcastPollTimer){ clearInterval(broadcastPollTimer); broadcastPollTimer = null; }
-    Object.keys(broadcastPeers).forEach(function(adminId){
-      try { broadcastPeers[adminId].pc.close(); } catch(e){}
-    });
-    broadcastPeers = {};
-  }
-
-  async function pollForViewRequests(){
-    if (!currentWebcamStream) return;
-    var keys = await slistKeys(SIGNAL_PREFIX + selfId + ":");
-    var adminIds = {};
-    keys.forEach(function(k){
-      var m = k.slice((SIGNAL_PREFIX + selfId + ":").length).split(":");
-      if (m[1] === "request") adminIds[m[0]] = true;
-    });
-    for (var adminId in adminIds){
-      if (!broadcastPeers[adminId]) await startBroadcastForAdmin(adminId);
-      else await pollAnswerAndIce(adminId);
-    }
-    // An admin who closed their "View" stops re-writing the request key —
-    // tear down any peer connection whose admin is no longer requesting it.
-    Object.keys(broadcastPeers).forEach(function(adminId){
-      if (!adminIds[adminId]){
-        try { broadcastPeers[adminId].pc.close(); } catch(e){}
-        delete broadcastPeers[adminId];
-      }
-    });
-  }
-
-  async function startBroadcastForAdmin(adminId){
-    var pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-    broadcastPeers[adminId] = { pc: pc, seenIceFromAdmin: 0 };
-    currentWebcamStream.getTracks().forEach(function(track){ pc.addTrack(track, currentWebcamStream); });
-    pc.onicecandidate = function(e){
-      if (e.candidate) pushIceFromViewerSide(selfId, adminId, e.candidate);
-    };
-    var offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await sset(signalKey(selfId, adminId, "offer"), { sdp: offer.sdp, ts: Date.now() });
-  }
-
-  async function pollAnswerAndIce(adminId){
-    var entry = broadcastPeers[adminId];
-    if (!entry) return;
-    var pc = entry.pc;
-    if (pc.connectionState === "closed") { delete broadcastPeers[adminId]; return; }
-    if (!pc.currentRemoteDescription){
-      var answerMsg = await sget(signalKey(selfId, adminId, "answer"));
-      if (answerMsg) await pc.setRemoteDescription({ type: "answer", sdp: answerMsg.sdp });
-    }
-    var iceMsg = await sget(signalKey(selfId, adminId, "ice-from-admin"));
-    if (iceMsg && iceMsg.list && iceMsg.list.length > entry.seenIceFromAdmin){
-      for (var i=entry.seenIceFromAdmin; i<iceMsg.list.length; i++){
-        try { await pc.addIceCandidate(iceMsg.list[i]); } catch(e){ /* ignore */ }
-      }
-      entry.seenIceFromAdmin = iceMsg.list.length;
-    }
-  }
-
-  window.__sentinelOnWebcamConnected = function(stream){
-    currentWebcamStream = stream;
-    updateOwnPresence();
-    if (role !== "admin") startBroadcastPolling();
-  };
-  window.__sentinelOnWebcamStopped = function(){
-    currentWebcamStream = null;
-    stopBroadcastPolling();
-    updateOwnPresence();
-  };
-
-  /* ---------------- presence heartbeat lifecycle ---------------- */
-
-  getSelfId();
-  updateOwnPresence();
-  updateJoinedBadge();
-  updateRoleUI();
-
-  heartbeatHandle = setInterval(function(){
-    updateOwnPresence();
-    updateJoinedBadge();
-    if (role === "admin" && !byId("joinedUsersModal").classList.contains("hidden")) renderJoinedUsers();
-  }, HEARTBEAT_MS);
-
-  window.addEventListener("pagehide", removeOwnPresence);
-  window.addEventListener("beforeunload", removeOwnPresence);
-
-  // The main console (simulated alerts, clock, map, etc.) runs for every
-  // visitor, not just the admin — only the camera roster, alert feed, and
-  // joined-users roster are gated. So start it immediately rather than
-  // waiting for a login.
-  if (window.__sentinelInit) window.__sentinelInit();
-})();
-</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.20.0/tf.min.js" crossorigin="anonymous"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/coco-ssd/2.2.3/coco-ssd.min.js" crossorigin="anonymous"></script>
 <script>
 (function(){
   "use strict";
 
   /* ============ DATA MODEL ============ */
 
-  var SECTORS = ["Sector 02","Sector 04","Sector 05"];
-
   var cameras = [
-    { id:"CAM-01", name:"CAM-01 — North Ridge",   sector:"Sector 04", x:120, y:360, status:"online" },
-    { id:"CAM-02", name:"CAM-02 — Culvert Rd",     sector:"Sector 04", x:180, y:300, status:"online" },
-    { id:"CAM-03", name:"CAM-03 — Watch Post 3",   sector:"Sector 04", x:230, y:230, status:"online" },
-    { id:"CAM-04", name:"CAM-04 — Fence Line A",   sector:"Sector 04", x:290, y:170, status:"online" },
-    { id:"CAM-05", name:"CAM-05 — Bridge Approach",sector:"Sector 02", x:370, y:120, status:"online" },
-    { id:"CAM-06", name:"CAM-06 — Check Post 2",   sector:"Sector 02", x:450, y:95,  status:"online" },
-    { id:"CAM-07", name:"CAM-07 — Border Road E",  sector:"Sector 02", x:530, y:120, status:"offline" },
-    { id:"CAM-08", name:"CAM-08 — Ridge Overlook", sector:"Sector 05", x:560, y:220, status:"online" },
-    { id:"CAM-09", name:"CAM-09 — South Trail",    sector:"Sector 05", x:520, y:300, status:"online" },
-    { id:"CAM-10", name:"CAM-10 — Depot Gate",     sector:"Sector 05", x:460, y:370, status:"online" }
+    { id:"CAM-01", name:"CAM-01 — North Ridge",    sector:"Sector 04", x:120, y:360, status:"online" },
+    { id:"CAM-02", name:"CAM-02 — Culvert Rd",      sector:"Sector 04", x:180, y:300, status:"online" },
+    { id:"CAM-03", name:"CAM-03 — Watch Post 3",    sector:"Sector 04", x:230, y:230, status:"online" },
+    { id:"CAM-04", name:"CAM-04 — Fence Line A",    sector:"Sector 04", x:290, y:170, status:"online" },
+    { id:"CAM-05", name:"CAM-05 — Bridge Approach", sector:"Sector 02", x:370, y:120, status:"online" },
+    { id:"CAM-06", name:"CAM-06 — Check Post 2",    sector:"Sector 02", x:450, y:95,  status:"online" },
+    { id:"CAM-07", name:"CAM-07 — Border Road E",   sector:"Sector 02", x:530, y:120, status:"offline" },
+    { id:"CAM-08", name:"CAM-08 — Ridge Overlook",  sector:"Sector 05", x:560, y:220, status:"online" },
+    { id:"CAM-09", name:"CAM-09 — South Trail",     sector:"Sector 05", x:520, y:300, status:"online" },
+    { id:"CAM-10", name:"CAM-10 — Depot Gate",      sector:"Sector 05", x:460, y:370, status:"online" }
   ];
 
   var alertTemplates = [
@@ -979,46 +344,41 @@
     { type:"Possible camera tamper", severity:"high", scoreRange:[80,99] }
   ];
 
+  // Backpressure: when this many alerts are unacknowledged, new ones queue
+  // instead of flooding the feed. This is the fix for the "alert every 5–11s
+  // is unusable" problem — operators see a controlled stream, not a firehose.
+  var MAX_LIVE_UNACK = 6;
+  var GROUP_WINDOW_MS = 90000; // similar alerts within this window collapse into one group
+
   var state = {
-    role: "viewer",   // "viewer" | "admin" — set via window.__sentinelSetRole by the presence/login script
     selectedCameraId: null,
     selectedAlertId: null,
     camFilter: "all",
     camSearch: "",
-    fenceOn: true,
-    mapView: "map",   // "map" | "feed"
-    alerts: [],       // {id, cameraId, type, severity, score, ts, acknowledged}
+    sevFilter: "all",
+    alerts: [],
+    pendingQueue: [],
     nextAlertId: 1,
-    lastNewAlertId: null
+    lastNewAlertId: null,
+    selectedAlertIds: {},
+    openGroups: {},
+    focusMode: false,
+    escalateTarget: null
   };
 
-  /* ---- Webcam (local browser device) state ----
-     Kept separate from the `cameras` data objects: a MediaStream isn't
-     serializable/display data, it's a live resource, so it lives here and
-     the `cameras` array only ever holds the plain camera record. */
-  var WEBCAM_CAM_ID = "CAM-WEB-001";
-  var WEBCAM_CAM_NAME = "My Webcam";
-  var webcamState = {
-    stream: null,
-    frameBuffer: []   // rolling buffer of recent real webcam frames (data URLs), used as alert evidence
-  };
+  var snoozed = {}; // camId -> unsnoozeAt timestamp
 
   /* ============ HELPERS ============ */
 
   function pad(n){ return n < 10 ? "0"+n : ""+n; }
   function fmtTime(d){ return pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds()); }
-  function fmtClock(d){
-    return d.toLocaleDateString(undefined,{month:"short",day:"2-digit"}) + "  " + fmtTime(d);
-  }
+  function fmtClock(d){ return d.toLocaleDateString(undefined,{month:"short",day:"2-digit"}) + "  " + fmtTime(d); }
   function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
   function pick(arr){ return arr[randInt(0,arr.length-1)]; }
   function byId(id){ return document.getElementById(id); }
   function scoreColor(score){ return score >= 70 ? "var(--red)" : score >= 45 ? "var(--amber)" : "var(--teal)"; }
-
-  function cameraById(id){
-    for (var i=0;i<cameras.length;i++){ if (cameras[i].id===id) return cameras[i]; }
-    return null;
-  }
+  function cameraById(id){ for (var i=0;i<cameras.length;i++){ if (cameras[i].id===id) return cameras[i]; } return null; }
+  function isSnoozed(camId){ return snoozed[camId] && Date.now() < snoozed[camId]; }
 
   function showToast(msg){
     var t = byId("toast");
@@ -1028,23 +388,28 @@
     showToast._h = setTimeout(function(){ t.classList.remove("show"); }, 2200);
   }
 
-  /* Enter/Space activates elements that behave like buttons but aren't <button> */
   function onActivateKey(e, fn){
-    if (e.key === "Enter" || e.key === " " || e.key === "Spacebar"){
-      e.preventDefault();
-      fn();
-    }
+    if (e.key === "Enter" || e.key === " " || e.key === "Spacebar"){ e.preventDefault(); fn(); }
   }
 
-  /* ============ ALERT GENERATION (simulated cameras) ============ */
+  function statusGlyph(status){
+    // Shape + color together, so status is never color-only.
+    if (status === "online") return '<svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="#4FA8A2"/></svg>';
+    if (status === "alert") return '<svg width="10" height="10" viewBox="0 0 10 10"><polygon points="5,0.5 9.5,9 0.5,9" fill="#D99A3E"/></svg>';
+    return '<svg width="10" height="10" viewBox="0 0 10 10"><rect width="8" height="8" x="1" y="1" fill="#6B7C71" opacity="0.6"/></svg>';
+  }
 
-  function generateAlert(){
-    var onlineCams = cameras.filter(function(c){ return c.status !== "offline" && c.type !== "webcam"; });
+  /* ============ ALERT GENERATION with backpressure + grouping ============ */
+
+  function unackCount(){ return state.alerts.filter(function(a){ return !a.acknowledged; }).length; }
+
+  function generateAlertObject(){
+    var onlineCams = cameras.filter(function(c){ return c.status !== "offline" && !isSnoozed(c.id); });
     if (onlineCams.length === 0) return null;
     var cam = pick(onlineCams);
     var tmpl = pick(alertTemplates);
     var score = randInt(tmpl.scoreRange[0], tmpl.scoreRange[1]);
-    var alertObj = {
+    return {
       id: "A" + (state.nextAlertId++),
       cameraId: cam.id,
       type: tmpl.type,
@@ -1053,806 +418,79 @@
       ts: new Date(),
       acknowledged: false
     };
-    state.alerts.unshift(alertObj);
-    if (state.alerts.length > 60) state.alerts.pop();
-
-    cam.status = "alert";
-    cam._alertRevertAt = Date.now() + 14000;
-
-    alertObj.evidence = captureEvidenceClip(cam.id, alertObj.ts);
-
-    return alertObj;
   }
 
-  function pushAlertToFeed(alertObj){
-    state.alerts.unshift(alertObj);
-    if (state.alerts.length > 60) state.alerts.pop();
-    state.lastNewAlertId = alertObj.id;
+  function admitAlert(a){
+    var cam = cameraById(a.cameraId);
+    if (cam){ cam.status = "alert"; cam._alertRevertAt = Date.now() + 14000; }
+    state.alerts.unshift(a);
+    if (state.alerts.length > 80) state.alerts.pop();
+    state.lastNewAlertId = a.id;
     renderAll();
-    var cam = cameraById(alertObj.cameraId);
-    showToast("New alert: " + alertObj.type + " — " + (cam ? cam.name : alertObj.cameraId));
-    setTimeout(function(){
-      if (state.lastNewAlertId === alertObj.id) state.lastNewAlertId = null;
-    }, 1700);
+    showToast("New alert: " + a.type + " — " + (cam ? cam.name : a.cameraId));
+    setTimeout(function(){ if (state.lastNewAlertId === a.id) state.lastNewAlertId = null; }, 1700);
+  }
+
+  function tickQueue(){
+    // Queueing disabled: alerts are admitted as soon as they're generated,
+    // no matter how many are already unacknowledged.
+    byId("queueNote").classList.remove("show");
+    byId("queueSub").textContent = "";
   }
 
   function revertExpiredCameraAlerts(){
     var now = Date.now();
     cameras.forEach(function(c){
-      if (c.status === "alert" && c._alertRevertAt && now > c._alertRevertAt){
-        c.status = "online";
-        delete c._alertRevertAt;
-      }
+      if (c.status === "alert" && c._alertRevertAt && now > c._alertRevertAt){ c.status = "online"; delete c._alertRevertAt; }
     });
   }
 
-  /* ============ SIMULATED CAMERA FEED ============ */
-
-  function hashStr(s){
-    var h = 0;
-    for (var i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i)) | 0; }
-    return h;
+  function scheduleNextAlert(){
+    var delay = randInt(12000, 22000); // slower cadence than the original 5–11s firehose
+    setTimeout(function(){
+      revertExpiredCameraAlerts();
+      var a = generateAlertObject();
+      if (a) admitAlert(a);
+      scheduleNextAlert();
+    }, delay);
   }
 
-  function mulberry32(seed){
-    return function(){
-      seed = (seed + 0x6D2B79F5) | 0;
-      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
+  /* ---- Grouping: similar alerts (same type + sector) within a time window
+     collapse into one summary row so the feed doesn't repeat itself. ---- */
 
-  function drawFeedFrame(ctx, cam, tMs, opts){
-    opts = opts || {};
-    var w = ctx.canvas.width, h = ctx.canvas.height;
-    ctx.clearRect(0,0,w,h);
+  function alertSector(a){ var c = cameraById(a.cameraId); return c ? c.sector : "Unknown"; }
 
-    if (!cam){
-      ctx.fillStyle = "#0B100D"; ctx.fillRect(0,0,w,h);
-      ctx.fillStyle = "#6B7C71"; ctx.font = "13px 'IBM Plex Mono', monospace";
-      ctx.textAlign = "center";
-      ctx.fillText("SELECT A CAMERA TO VIEW ITS FEED", w/2, h/2);
-      ctx.textAlign = "left";
-      return;
-    }
-
-    var seed = hashStr(cam.id);
-    var rand = mulberry32(seed + Math.floor(tMs/300));
-
-    if (cam.status === "offline"){
-      ctx.fillStyle = "#0B100D"; ctx.fillRect(0,0,w,h);
-      for (var n=0;n<220;n++){
-        ctx.fillStyle = "rgba(200,200,200,"+(rand()*0.14)+")";
-        ctx.fillRect(rand()*w, rand()*h, 2, 2);
-      }
-      ctx.fillStyle = "#6B7C71"; ctx.textAlign = "center";
-      ctx.font = "15px 'IBM Plex Mono', monospace";
-      ctx.fillText("NO SIGNAL", w/2, h/2);
-      ctx.font = "11px 'IBM Plex Mono', monospace";
-      ctx.fillText(cam.id + " — feed lost", w/2, h/2+22);
-      ctx.textAlign = "left";
-      return;
-    }
-
-    var grad = ctx.createLinearGradient(0,0,0,h);
-    grad.addColorStop(0, "#141B17"); grad.addColorStop(1, "#0B100D");
-    ctx.fillStyle = grad; ctx.fillRect(0,0,w,h);
-
-    ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, h*0.66); ctx.lineTo(w, h*0.58); ctx.stroke();
-
-    for (var g=0; g<70; g++){
-      ctx.fillStyle = "rgba(255,255,255,"+(rand()*0.03)+")";
-      ctx.fillRect(rand()*w, rand()*h, 1, 1);
-    }
-
-    var objectCount = 2 + (seed % 2);
-    var flagged = (opts.flagged !== undefined) ? opts.flagged : (cam.status === "alert");
-    var flagIdx = Math.abs(seed) % objectCount;
-
-    for (var o=0; o<objectCount; o++){
-      var phase = (Math.abs(seed) % 1000) + o*777;
-      var speed = 0.00011 + (o*0.00003);
-      var driftX = ((tMs*speed + phase) % (w+120)) - 60;
-      var baseY = h*0.5 + o*30 + Math.sin(tMs*0.0006 + phase)*7;
-      var isVehicle = (o % 2 === 0);
-      var isFlag = flagged && (o === flagIdx);
-
-      if (isVehicle){
-        ctx.fillStyle = isFlag ? "#D99A3E" : "rgba(79,168,162,0.55)";
-        ctx.fillRect(driftX, baseY, 30, 13);
-      } else {
-        ctx.fillStyle = isFlag ? "#D99A3E" : "rgba(231,236,229,0.4)";
-        ctx.beginPath(); ctx.arc(driftX+7, baseY-7, 3.6, 0, Math.PI*2); ctx.fill();
-        ctx.fillRect(driftX+3, baseY-2, 9, 15);
-      }
-      if (isFlag){
-        ctx.strokeStyle = "#D99A3E"; ctx.lineWidth = 1.2;
-        ctx.strokeRect(driftX-7, baseY-18, 44, 38);
-        ctx.font = "9px 'IBM Plex Mono', monospace"; ctx.fillStyle = "#D99A3E";
-        ctx.fillText("FLAGGED", driftX-7, baseY-22);
-      }
-    }
-
-    ctx.font = "11px 'IBM Plex Mono', monospace";
-    ctx.fillStyle = "rgba(143,160,149,0.9)"; ctx.textAlign = "left";
-    ctx.fillText(cam.id + " · " + cam.sector, 12, 20);
-
-    ctx.textAlign = "right";
-    var d = new Date(tMs);
-    var hh=("0"+d.getHours()).slice(-2), mm=("0"+d.getMinutes()).slice(-2), ss=("0"+d.getSeconds()).slice(-2);
-    ctx.fillText(hh+":"+mm+":"+ss, w-12, 20);
-
-    ctx.textAlign = "left";
-    ctx.fillStyle = "rgba(107,124,113,0.9)"; ctx.font = "10px 'IBM Plex Mono', monospace";
-    ctx.fillText("SIMULATED FEED · " + w + "×" + h, 12, h-12);
-
-    if (flagged){
-      if (Math.floor(tMs/500) % 2 === 0){
-        ctx.fillStyle = "#C4573F";
-        ctx.beginPath(); ctx.arc(w-18, h-16, 4, 0, Math.PI*2); ctx.fill();
-      }
-      ctx.textAlign = "right"; ctx.fillStyle = "rgba(196,87,63,0.95)";
-      ctx.fillText("REC", w-28, h-12);
-    }
-    ctx.textAlign = "left";
-  }
-
-  var feedLoopHandle = null;
-
-  function startFeedLoop(){
-    stopFeedLoop();
-    var canvas = byId("feedCanvas");
-    var ctx = canvas.getContext("2d");
-    feedLoopHandle = setInterval(function(){
-      var cam = state.selectedCameraId ? cameraById(state.selectedCameraId) : null;
-      drawFeedFrame(ctx, cam, Date.now());
-    }, 66);
-  }
-
-  function stopFeedLoop(){
-    if (feedLoopHandle){ clearInterval(feedLoopHandle); feedLoopHandle = null; }
-  }
-
-  function renderCenterView(){
-    var svg = byId("mapSvg");
-    var canvas = byId("feedCanvas");
-    var video = byId("webcamVideo");
-    var fenceBtn = byId("fenceToggle");
-    var backBtn = byId("backToMapBtn");
-    var motionEl = byId("motionIndicator");
-
-    var selCam = state.selectedCameraId ? cameraById(state.selectedCameraId) : null;
-    var showLiveWebcam = !!(selCam && selCam.type === "webcam" && webcamState.stream);
-
-    if (state.mapView === "feed"){
-      svg.style.display = "none";
-      fenceBtn.style.display = "none";
-      backBtn.style.display = "";
-
-      if (showLiveWebcam){
-        canvas.style.display = "none";
-        video.style.display = "block";
-        stopFeedLoop();
-        attachWebcamStreamToVideo();
-        motionEl.style.display = "flex";
-        if (!motionDet.active) startMotionDetection();
-        if (!aiState.active) startAiDetection();
-      } else {
-        video.style.display = "none";
-        video.srcObject = null;
-        canvas.style.display = "block";
-        startFeedLoop();
-        motionEl.style.display = "none";
-        stopMotionDetection();
-        stopAiDetection();
-      }
-    } else {
-      svg.style.display = "";
-      canvas.style.display = "none";
-      video.style.display = "none";
-      fenceBtn.style.display = "";
-      backBtn.style.display = "none";
-      motionEl.style.display = "none";
-      stopFeedLoop();
-      stopMotionDetection();
-      stopAiDetection();
-      renderMap();
-    }
-  }
-
-  function captureEvidenceClip(camId, atDate){
-    var cam = cameraById(camId);
-    var offscreen = document.createElement("canvas");
-    offscreen.width = 320; offscreen.height = 200;
-    var ctx = offscreen.getContext("2d");
-    var frameCount = 5;
-    var spacingMs = 350;
-    var baseTs = atDate.getTime();
-    var frames = [];
-    for (var i=0;i<frameCount;i++){
-      var t = baseTs - (frameCount-1-i)*spacingMs;
-      var flagged = (i === frameCount-1);
-      drawFeedFrame(ctx, cam, t, { flagged: flagged });
-      frames.push(offscreen.toDataURL("image/png"));
-    }
-    return { frames: frames, capturedAt: atDate };
-  }
-
-  /* ============ WEBCAM (local browser device) ============ */
-
-  function getWebcamCamera(){
-    return cameraById(WEBCAM_CAM_ID);
-  }
-
-  function ensureWebcamCameraEntry(status){
-    var cam = getWebcamCamera();
-    if (!cam){
-      cam = {
-        id: WEBCAM_CAM_ID,
-        name: WEBCAM_CAM_NAME,
-        sector: "Local Device",
-        type: "webcam",
-        status: status || "offline"
-      };
-      cameras.push(cam);
-    } else {
-      cam.status = status || cam.status;
-    }
-    return cam;
-  }
-
-  function attachWebcamStreamToVideo(){
-    var video = byId("webcamVideo");
-    if (video && webcamState.stream && video.srcObject !== webcamState.stream){
-      video.srcObject = webcamState.stream;
-    }
-  }
-
-  function detachWebcamTrackHandlers(stream){
-    if (!stream) return;
-    stream.getTracks().forEach(function(track){ track.onended = null; });
-  }
-
-  function handleWebcamTrackEnded(){
-    showToast("Webcam disconnected.");
-    stopWebcam();
-  }
-
-  function selectWebcamInView(){
-    state.selectedCameraId = WEBCAM_CAM_ID;
-    state.mapView = "feed";
-    renderCameraList();
-    renderCenterView();
-    renderDetailStrip();
-  }
-
-  function connectWebcam(){
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      showToast("This browser doesn't support webcam access.");
-      return;
-    }
-    if (webcamState.stream){
-      selectWebcamInView();
-      return;
-    }
-    navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-      .then(function(stream){
-        webcamState.stream = stream;
-        stream.getVideoTracks().forEach(function(track){
-          track.onended = handleWebcamTrackEnded;
-        });
-        ensureWebcamCameraEntry("online");
-        selectWebcamInView();
-        renderAll();
-        loadAiModel();
-        showToast("Webcam connected. Loading AI detection model…");
-        if (window.__sentinelOnWebcamConnected) window.__sentinelOnWebcamConnected(stream);
-      })
-      .catch(function(err){
-        var name = err && err.name;
-        var msg = "Unable to access the webcam.";
-        if (name === "NotAllowedError" || name === "PermissionDeniedError"){
-          msg = "Camera permission was denied.";
-        } else if (name === "NotFoundError" || name === "DevicesNotFoundError"){
-          msg = "No camera device was found.";
-        } else if (name === "NotReadableError" || name === "TrackStartError"){
-          msg = "Camera is already in use by another application.";
-        } else if (name === "OverconstrainedError"){
-          msg = "No camera matched the requested settings.";
-        }
-        var cam = getWebcamCamera();
-        if (cam){ cam.status = "offline"; renderAll(); }
-        showToast(msg);
-      });
-  }
-
-  function stopWebcam(){
-    stopMotionDetection();
-    stopAiDetection();
-    if (webcamState.stream){
-      detachWebcamTrackHandlers(webcamState.stream);
-      webcamState.stream.getTracks().forEach(function(track){ track.stop(); });
-      webcamState.stream = null;
-    }
-    webcamState.frameBuffer = [];
-    var video = byId("webcamVideo");
-    if (video) video.srcObject = null;
-    var cam = getWebcamCamera();
-    if (cam) cam.status = "offline";
-    renderAll();
-    if (window.__sentinelOnWebcamStopped) window.__sentinelOnWebcamStopped();
-  }
-
-  function removeWebcamCamera(){
-    stopWebcam();
-    var idx = -1;
-    for (var i=0;i<cameras.length;i++){ if (cameras[i].id === WEBCAM_CAM_ID){ idx = i; break; } }
-    if (idx !== -1) cameras.splice(idx, 1);
-    if (state.selectedCameraId === WEBCAM_CAM_ID){
-      state.selectedCameraId = null;
-      state.mapView = "map";
-    }
-    renderAll();
-    showToast("Webcam removed.");
-  }
-
-  /* ============ WEBCAM MOTION DETECTION ============ */
-
-  var MOTION_SAMPLE_MS   = 180;
-  var MOTION_THRESHOLD   = 0.05;
-  var MOTION_DEBOUNCE    = 2;
-  var MOTION_COOLDOWN_MS = 8000;
-  var EVIDENCE_CAPTURE_MS = 450;
-
-  var motionDet = {
-    active: false,
-    canvas: null,
-    ctx: null,
-    timer: null,
-    prevData: null,
-    consecutiveHits: 0,
-    cooldownUntil: 0
-  };
-
-  var evidenceBuf = {
-    canvas: null,
-    ctx: null,
-    lastCapture: 0
-  };
-
-  function startMotionDetection(){
-    if (motionDet.active) return;
-    var c = document.createElement("canvas");
-    c.width = 80; c.height = 60;
-    motionDet.canvas = c;
-    motionDet.ctx = c.getContext("2d", { willReadFrequently:true });
-    motionDet.prevData = null;
-    motionDet.consecutiveHits = 0;
-    motionDet.active = true;
-
-    if (!evidenceBuf.canvas){
-      evidenceBuf.canvas = document.createElement("canvas");
-      evidenceBuf.canvas.width = 320; evidenceBuf.canvas.height = 200;
-      evidenceBuf.ctx = evidenceBuf.canvas.getContext("2d");
-    }
-
-    motionLoop();
-  }
-
-  function stopMotionDetection(){
-    motionDet.active = false;
-    if (motionDet.timer){ clearTimeout(motionDet.timer); motionDet.timer = null; }
-    motionDet.prevData = null;
-    updateMotionIndicator(0);
-  }
-
-  function motionLoop(){
-    if (!motionDet.active) return;
-    motionDet.timer = setTimeout(function(){
-      sampleMotionFrame();
-      motionLoop();
-    }, MOTION_SAMPLE_MS);
-  }
-
-  function sampleMotionFrame(){
-    var video = byId("webcamVideo");
-    if (!video || !webcamState.stream || video.readyState < 2 || !video.videoWidth) return;
-
-    bufferWebcamEvidenceFrame(video);
-
-    var ctx = motionDet.ctx;
-    ctx.drawImage(video, 0, 0, motionDet.canvas.width, motionDet.canvas.height);
-    var frame = ctx.getImageData(0, 0, motionDet.canvas.width, motionDet.canvas.height);
-
-    if (motionDet.prevData){
-      var score = computeMotionScore(motionDet.prevData.data, frame.data);
-      updateMotionIndicator(score);
-
-      if (score > MOTION_THRESHOLD){
-        motionDet.consecutiveHits++;
-      } else {
-        motionDet.consecutiveHits = 0;
-      }
-
-      var now = Date.now();
-      if (motionDet.consecutiveHits >= MOTION_DEBOUNCE && now >= motionDet.cooldownUntil){
-        triggerWebcamMotionAlert(score);
-        motionDet.cooldownUntil = now + MOTION_COOLDOWN_MS;
-        motionDet.consecutiveHits = 0;
-      }
-    }
-    motionDet.prevData = frame;
-  }
-
-  function computeMotionScore(prev, cur){
-    var changed = 0, sampled = 0;
-    for (var i=0; i<prev.length; i+=16){
-      var lumaPrev = prev[i]*0.299 + prev[i+1]*0.587 + prev[i+2]*0.114;
-      var lumaCur  = cur[i]*0.299  + cur[i+1]*0.587  + cur[i+2]*0.114;
-      if (Math.abs(lumaPrev - lumaCur) > 25) changed++;
-      sampled++;
-    }
-    return sampled ? changed / sampled : 0;
-  }
-
-  function updateMotionIndicator(score){
-    var label = byId("motionLabel");
-    var fill = byId("motionFill");
-    if (!label || !fill) return;
-    var pct = Math.round(score * 100);
-    label.textContent = "Motion: " + pct + "%";
-    fill.style.width = Math.min(100, pct * 4) + "%";
-    fill.style.background = score > MOTION_THRESHOLD ? "var(--amber)" : "var(--teal)";
-  }
-
-  function bufferWebcamEvidenceFrame(video){
-    var now = Date.now();
-    if (now - evidenceBuf.lastCapture < EVIDENCE_CAPTURE_MS) return;
-    evidenceBuf.lastCapture = now;
-    evidenceBuf.ctx.drawImage(video, 0, 0, evidenceBuf.canvas.width, evidenceBuf.canvas.height);
-    var dataUrl = evidenceBuf.canvas.toDataURL("image/jpeg", 0.62);
-    webcamState.frameBuffer.push(dataUrl);
-    if (webcamState.frameBuffer.length > 5) webcamState.frameBuffer.shift();
-  }
-
-  function triggerWebcamMotionAlert(score){
-    var cam = getWebcamCamera();
-    if (!cam) return;
-
-    var threatScore = Math.max(20, Math.min(97, Math.round(score * 480)));
-    var severity = threatScore >= 70 ? "high" : threatScore >= 45 ? "med" : "low";
-    var type = severity === "high" ? "Motion detected — high intensity"
-             : severity === "med"  ? "Motion detected in frame"
-             : "Minor movement detected";
-
-    var alertObj = {
-      id: "A" + (state.nextAlertId++),
-      cameraId: cam.id,
-      type: type,
-      severity: severity,
-      score: threatScore,
-      ts: new Date(),
-      acknowledged: false,
-      evidence: {
-        frames: webcamState.frameBuffer.slice(),
-        capturedAt: new Date()
-      }
-    };
-
-    cam.status = "alert";
-    cam._alertRevertAt = Date.now() + 14000;
-
-    pushAlertToFeed(alertObj);
-  }
-
-  /* ============ REAL AI OBJECT DETECTION (client-side, no backend) ============ */
-
-  var AI_INFERENCE_FPS         = 4;
-  var AI_CONFIDENCE_THRESHOLD  = 0.55;
-  var AI_CLASSES = { person:1, car:1, truck:1, bus:1, motorcycle:1, bicycle:1 };
-
-  var TRACK_MATCH_MAX_DIST   = 0.18;
-  var TRACK_STALE_MS         = 1500;
-  var INTRUSION_CONFIRM_HITS = 3;
-  var LOITER_DWELL_MS        = 8000;
-  var AI_ALERT_COOLDOWN_MS   = 6000;
-
-  var aiState = {
-    model: null,
-    status: "idle",
-    active: false,
-    timer: null,
-    tracks: [],
-    nextTrackId: 1,
-    lastFps: 0
-  };
-
-  var webcamZone = { points: [], drawing: false };
-
-  function updateAiStatusUI(){
-    var badge = byId("aiBadge");
-    var text = byId("aiBadgeText");
-    if (!badge || !text) return;
-    badge.className = "ai-badge status-" + aiState.status;
-    badge.style.display = (aiState.status === "idle") ? "none" : "flex";
-    var labels = {
-      loading: "AI: loading model…",
-      ready: "AI active" + (aiState.active ? " · " + aiState.lastFps + " fps" : ""),
-      error: "AI: unavailable (motion fallback active)",
-      unsupported: "AI: unsupported in this browser"
-    };
-    text.textContent = labels[aiState.status] || "AI: off";
-  }
-
-  function loadAiModel(){
-    if (aiState.model || aiState.status === "loading") return;
-    if (typeof tf === "undefined" || typeof cocoSsd === "undefined"){
-      aiState.status = "error";
-      updateAiStatusUI();
-      return;
-    }
-    aiState.status = "loading";
-    updateAiStatusUI();
-    cocoSsd.load({ base: "lite_mobilenet_v2" }).then(function(model){
-      aiState.model = model;
-      aiState.status = "ready";
-      updateAiStatusUI();
-      showToast("AI object detection model loaded.");
-    }).catch(function(err){
-      aiState.status = "error";
-      updateAiStatusUI();
-      showToast("AI model failed to load — falling back to motion detection only.");
-    });
-  }
-
-  function startAiDetection(){
-    if (!aiState.model || aiState.status !== "ready") { loadAiModel(); }
-    aiState.active = true;
-    byId("zoneControls").style.display = "flex";
-    var overlay = byId("aiOverlayCanvas");
-    if (overlay) overlay.style.display = "block";
-    aiDetectLoop();
-  }
-
-  function stopAiDetection(){
-    aiState.active = false;
-    if (aiState.timer){ clearTimeout(aiState.timer); aiState.timer = null; }
-    aiState.tracks = [];
-    cancelZoneDrawing();
-    byId("zoneControls").style.display = "none";
-    var overlay = byId("aiOverlayCanvas");
-    if (overlay){
-      overlay.style.display = "none";
-      var ctx = overlay.getContext("2d");
-      if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
-    }
-    updateAiStatusUI();
-  }
-
-  function aiDetectLoop(){
-    if (!aiState.active) return;
-    aiState.timer = setTimeout(function(){
-      runAiDetection().then(aiDetectLoop, aiDetectLoop);
-    }, 1000 / AI_INFERENCE_FPS);
-  }
-
-  function runAiDetection(){
-    var video = byId("webcamVideo");
-    if (!aiState.model || aiState.status !== "ready" || !video || video.readyState < 2 || !video.videoWidth){
-      return Promise.resolve();
-    }
-    var t0 = performance.now();
-    return aiState.model.detect(video).then(function(preds){
-      aiState.lastFps = Math.max(1, Math.round(1000 / Math.max(1, performance.now() - t0)));
-      var filtered = preds.filter(function(p){
-        return AI_CLASSES[p.class] && p.score >= AI_CONFIDENCE_THRESHOLD;
-      });
-      updateTracks(filtered, video.videoWidth, video.videoHeight);
-      evaluateZoneLogic();
-      drawAiOverlay(video);
-      updateAiStatusUI();
-    }).catch(function(){ /* a single failed inference shouldn't kill the loop */ });
-  }
-
-  function updateTracks(preds, vw, vh){
-    var now = Date.now();
+  function buildGroups(list){
+    var groups = [];
     var used = {};
-    preds.forEach(function(p){
-      var cx = (p.bbox[0] + p.bbox[2] / 2) / vw;
-      var cy = (p.bbox[1] + p.bbox[3]) / vh;
-      var best = null, bestDist = TRACK_MATCH_MAX_DIST;
-      aiState.tracks.forEach(function(tr, idx){
-        if (used[idx] || tr.class !== p.class) return;
-        var d = Math.hypot(tr.center[0] - cx, tr.center[1] - cy);
-        if (d < bestDist){ bestDist = d; best = idx; }
-      });
-      if (best !== null){
-        var tr = aiState.tracks[best];
-        tr.box = p.bbox; tr.center = [cx, cy]; tr.lastSeen = now; tr.score = p.score;
-        used[best] = true;
-      } else {
-        aiState.tracks.push({
-          id: "T" + (aiState.nextTrackId++), class: p.class, box: p.bbox, center: [cx, cy],
-          score: p.score, firstSeen: now, lastSeen: now,
-          inZoneSince: null, zoneHits: 0, lastIntrusionAlertAt: 0, lastLoiterAlertAt: 0
-        });
-      }
-    });
-    aiState.tracks = aiState.tracks.filter(function(tr){ return now - tr.lastSeen < TRACK_STALE_MS; });
-  }
-
-  function pointInPolygon(pt, poly){
-    var x = pt[0], y = pt[1], inside = false;
-    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++){
-      var xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
-      var intersect = ((yi > y) !== (yj > y)) &&
-        (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-9) + xi);
-      if (intersect) inside = !inside;
-    }
-    return inside;
-  }
-
-  function evaluateZoneLogic(){
-    if (!state.fenceOn || webcamZone.points.length < 3) return;
-    var now = Date.now();
-    aiState.tracks.forEach(function(tr){
-      var inside = pointInPolygon(tr.center, webcamZone.points);
-      if (inside){
-        if (tr.inZoneSince === null) tr.inZoneSince = now;
-        tr.zoneHits++;
-        var dwell = now - tr.inZoneSince;
-        if (tr.zoneHits >= INTRUSION_CONFIRM_HITS && now - tr.lastIntrusionAlertAt > AI_ALERT_COOLDOWN_MS){
-          raiseAiAlert(tr, "high", (tr.class === "person" ? "Person" : "Vehicle") + " entered restricted zone");
-          tr.lastIntrusionAlertAt = now;
+    list.forEach(function(a){
+      if (used[a.id]) return;
+      var members = [a];
+      used[a.id] = true;
+      list.forEach(function(b){
+        if (used[b.id] || b.id === a.id) return;
+        if (b.type === a.type && alertSector(b) === alertSector(a) && Math.abs(b.ts - a.ts) <= GROUP_WINDOW_MS){
+          members.push(b); used[b.id] = true;
         }
-        if (dwell >= LOITER_DWELL_MS && now - tr.lastLoiterAlertAt > AI_ALERT_COOLDOWN_MS){
-          raiseAiAlert(tr, "med", "Loitering in restricted zone (" + Math.round(dwell / 1000) + "s)");
-          tr.lastLoiterAlertAt = now;
-        }
-      } else {
-        tr.inZoneSince = null;
-        tr.zoneHits = 0;
-      }
-    });
-  }
-
-  function raiseAiAlert(tr, severity, label){
-    var cam = getWebcamCamera();
-    if (!cam) return;
-    var threatScore = Math.max(30, Math.min(98, Math.round(tr.score * 70) + (severity === "high" ? 25 : 10)));
-    var alertObj = {
-      id: "A" + (state.nextAlertId++),
-      cameraId: cam.id,
-      type: label,
-      objectClass: tr.class,
-      confidence: tr.score,
-      severity: severity,
-      score: threatScore,
-      ts: new Date(),
-      acknowledged: false,
-      evidence: {
-        frames: webcamState.frameBuffer.slice(),
-        capturedAt: new Date()
-      }
-    };
-    cam.status = "alert";
-    cam._alertRevertAt = Date.now() + 14000;
-    pushAlertToFeed(alertObj);
-  }
-
-  function drawAiOverlay(video){
-    var overlay = byId("aiOverlayCanvas");
-    if (!overlay || overlay.style.display === "none") return;
-    var rect = overlay.getBoundingClientRect();
-    if (overlay.width !== rect.width) overlay.width = rect.width;
-    if (overlay.height !== rect.height) overlay.height = rect.height;
-    var ctx = overlay.getContext("2d");
-    ctx.clearRect(0, 0, overlay.width, overlay.height);
-
-    var vw = video.videoWidth, vh = video.videoHeight;
-    var scale = Math.max(overlay.width / vw, overlay.height / vh);
-    var offX = (overlay.width - vw * scale) / 2;
-    var offY = (overlay.height - vh * scale) / 2;
-    function toScreen(x, y){ return [x * scale + offX, y * scale + offY]; }
-
-    aiState.tracks.forEach(function(tr){
-      var b = tr.box;
-      var p0 = toScreen(b[0], b[1]);
-      var p1 = toScreen(b[0] + b[2], b[1] + b[3]);
-      var inZone = webcamZone.points.length >= 3 && pointInPolygon(tr.center, webcamZone.points);
-      ctx.strokeStyle = inZone ? "#C4573F" : "#4FA8A2";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(p0[0], p0[1], p1[0] - p0[0], p1[1] - p0[1]);
-      var label = tr.class + " " + Math.round(tr.score * 100) + "%";
-      ctx.font = "11px 'IBM Plex Mono', monospace";
-      var tw = ctx.measureText(label).width;
-      ctx.fillStyle = inZone ? "#C4573F" : "#4FA8A2";
-      ctx.fillRect(p0[0], p0[1] - 16, tw + 8, 16);
-      ctx.fillStyle = "#0B100D";
-      ctx.fillText(label, p0[0] + 4, p0[1] - 4);
-    });
-
-    if (webcamZone.points.length){
-      ctx.beginPath();
-      webcamZone.points.forEach(function(pt, i){
-        var s = toScreen(pt[0] * vw, pt[1] * vh);
-        if (i === 0) ctx.moveTo(s[0], s[1]); else ctx.lineTo(s[0], s[1]);
       });
-      if (webcamZone.points.length >= 3 && !webcamZone.drawing) ctx.closePath();
-      ctx.strokeStyle = "#D99A3E";
-      ctx.lineWidth = 2;
-      ctx.setLineDash(webcamZone.drawing ? [5, 4] : []);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      if (webcamZone.points.length >= 3){
-        ctx.fillStyle = "rgba(217,154,62,0.12)";
-        ctx.fill();
-      }
-    }
-  }
-
-  function startZoneDrawing(){
-    webcamZone.points = [];
-    webcamZone.drawing = true;
-    byId("aiOverlayCanvas").classList.add("drawing");
-    byId("drawZoneBtn").classList.add("zone-drawing");
-    byId("drawZoneBtn").textContent = "Drawing… (Esc to cancel)";
-    byId("zoneHint").style.display = "block";
-  }
-
-  function cancelZoneDrawing(){
-    webcamZone.drawing = false;
-    var overlay = byId("aiOverlayCanvas");
-    if (overlay) overlay.classList.remove("drawing");
-    var btn = byId("drawZoneBtn");
-    if (btn){ btn.classList.remove("zone-drawing"); btn.textContent = "Draw restricted zone"; }
-    var hint = byId("zoneHint");
-    if (hint) hint.style.display = "none";
-  }
-
-  function finishZoneDrawing(){
-    if (webcamZone.points.length < 3){
-      showToast("A zone needs at least 3 points — click to add more, or Esc to cancel.");
-      return;
-    }
-    cancelZoneDrawing();
-    showToast("Restricted zone saved. Real intrusion/loitering detection is now active for this area.");
-  }
-
-  function handleOverlayClick(e){
-    if (!webcamZone.drawing) return;
-    var overlay = byId("aiOverlayCanvas");
-    var video = byId("webcamVideo");
-    var rect = overlay.getBoundingClientRect();
-    var vw = video.videoWidth || rect.width, vh = video.videoHeight || rect.height;
-    var scale = Math.max(rect.width / vw, rect.height / vh);
-    var offX = (rect.width - vw * scale) / 2;
-    var offY = (rect.height - vh * scale) / 2;
-    var x = (e.clientX - rect.left - offX) / scale / vw;
-    var y = (e.clientY - rect.top - offY) / scale / vh;
-    x = Math.min(1, Math.max(0, x));
-    y = Math.min(1, Math.max(0, y));
-    webcamZone.points.push([x, y]);
+      groups.push(members);
+    });
+    return groups;
   }
 
   /* ============ RENDER: HEADER ============ */
 
   function renderHeaderStats(){
     var online = cameras.filter(function(c){ return c.status !== "offline"; }).length;
-    var open = state.alerts.filter(function(a){ return !a.acknowledged; }).length;
     byId("onlineCount").textContent = online + "/" + cameras.length;
-    byId("openAlertCount").textContent = open;
+    byId("openAlertCount").textContent = unackCount();
   }
 
-  function tickClock(){
-    byId("clock").textContent = fmtClock(new Date());
-  }
+  function tickClock(){ byId("clock").textContent = fmtClock(new Date()); }
 
   /* ============ RENDER: CAMERA LIST ============ */
 
-  function matchesFilter(cam){
+  function matchesCamFilter(cam){
     if (state.camFilter !== "all" && cam.status !== state.camFilter) return false;
     if (state.camSearch){
       var q = state.camSearch.toLowerCase();
@@ -1862,92 +500,73 @@
   }
 
   function renderFilterCounts(){
-    var counts = { all: cameras.length, online: 0, alert: 0, offline: 0 };
-    cameras.forEach(function(c){ counts[c.status] = (counts[c.status] || 0) + 1; });
+    var counts = { all: cameras.length, online:0, alert:0, offline:0 };
+    cameras.forEach(function(c){ counts[c.status] = (counts[c.status]||0)+1; });
     byId("countAll").textContent = counts.all;
-    byId("countOnline").textContent = counts.online || 0;
-    byId("countAlert").textContent = counts.alert || 0;
-    byId("countOffline").textContent = counts.offline || 0;
+    byId("countOnline").textContent = counts.online||0;
+    byId("countAlert").textContent = counts.alert||0;
+    byId("countOffline").textContent = counts.offline||0;
   }
 
   function renderCameraList(){
     var list = byId("cameraList");
-    var visible = cameras.filter(matchesFilter);
+    var visible = cameras.filter(matchesCamFilter);
     byId("camSearchClear").classList.toggle("show", !!state.camSearch);
     if (visible.length === 0){
       list.innerHTML = '<div class="cam-empty">No cameras match this filter. <button type="button" id="camEmptyReset">Clear filters</button></div>';
-      var resetBtn = byId("camEmptyReset");
-      if (resetBtn) resetBtn.addEventListener("click", resetCameraFilters);
+      byId("camEmptyReset").addEventListener("click", resetCameraFilters);
       return;
     }
-    var html = visible.map(function(cam){
+    list.innerHTML = visible.map(function(cam){
       var sel = cam.id === state.selectedCameraId ? " selected" : "";
-      return '<div class="cam-row'+sel+'" data-cam="'+cam.id+'" role="option" tabindex="0" aria-selected="'+(cam.id === state.selectedCameraId)+'" aria-label="'+cam.name+', '+cam.sector+', '+cam.status+'">'+
-        '<span class="cam-dot '+cam.status+'"></span>'+
-        '<div class="cam-info">'+
-          '<div class="cam-name">'+cam.name+'</div>'+
-          '<div class="cam-sector">'+cam.sector+'</div>'+
-        '</div>'+
+      var snz = isSnoozed(cam.id) ? " snoozed" : "";
+      return '<div class="cam-row'+sel+snz+'" data-cam="'+cam.id+'" role="option" tabindex="0" aria-selected="'+(cam.id===state.selectedCameraId)+'" aria-label="'+cam.name+', '+cam.sector+', '+cam.status+(isSnoozed(cam.id)?', snoozed':'')+'">'+
+        '<span class="status-glyph">'+statusGlyph(cam.status)+'</span>'+
+        '<div class="cam-info"><div class="cam-name">'+cam.name+'</div><div class="cam-sector">'+cam.sector+'</div></div>'+
+        (isSnoozed(cam.id) ? '<span class="snooze-tag">snoozed</span>' : '')+
       '</div>';
     }).join("");
-    list.innerHTML = html;
   }
 
   function resetCameraFilters(){
-    state.camFilter = "all";
-    state.camSearch = "";
+    state.camFilter = "all"; state.camSearch = "";
     byId("camSearch").value = "";
     Array.prototype.forEach.call(byId("camFilters").querySelectorAll(".chip"), function(c){
       var isAll = c.getAttribute("data-filter") === "all";
-      c.classList.toggle("active", isAll);
-      c.setAttribute("aria-pressed", isAll ? "true" : "false");
+      c.classList.toggle("active", isAll); c.setAttribute("aria-pressed", isAll ? "true":"false");
     });
     renderCameraList();
   }
 
   /* ============ RENDER: MAP ============ */
 
-  function getMappableCameras(){
-    return cameras.filter(function(c){ return typeof c.x === "number" && typeof c.y === "number"; });
-  }
-
   function renderMap(){
     var svg = byId("mapSvg");
     var parts = [];
-    var mappable = getMappableCameras();
-
-    parts.push('<defs><linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">'+
-      '<stop offset="0" stop-color="#2A352E"/><stop offset="1" stop-color="#2A352E"/></linearGradient></defs>');
-
-    var sorted = mappable.slice().sort(function(a,b){ return a.x - b.x; });
+    var sorted = cameras.slice().sort(function(a,b){ return a.x-b.x; });
     if (sorted.length){
       var pathD = "M " + sorted[0].x + " " + sorted[0].y;
       for (var i=1;i<sorted.length;i++){
-        var prev = sorted[i-1], cur = sorted[i];
-        var mx = (prev.x+cur.x)/2;
-        pathD += " Q " + mx + " " + (prev.y - 20) + " " + cur.x + " " + cur.y;
+        var prev=sorted[i-1], cur=sorted[i], mx=(prev.x+cur.x)/2;
+        pathD += " Q " + mx + " " + (prev.y-20) + " " + cur.x + " " + cur.y;
       }
-      if (state.fenceOn){
-        parts.push('<path d="'+pathD+'" stroke="#3A4A40" stroke-width="1.6" fill="none" stroke-dasharray="4 6"/>');
-      }
+      if (state.fenceOn !== false) parts.push('<path d="'+pathD+'" stroke="#3A4A40" stroke-width="1.6" fill="none" stroke-dasharray="4 6"/>');
     }
-
-    mappable.forEach(function(cam){
+    cameras.forEach(function(cam){
       var color = cam.status === "online" ? "#4FA8A2" : cam.status === "alert" ? "#D99A3E" : "#6B7C71";
       var selected = cam.id === state.selectedCameraId;
       parts.push('<g class="node" data-cam="'+cam.id+'" tabindex="0" role="button" aria-label="'+cam.name+', '+cam.status+'">');
-      if (cam.status === "alert"){
-        parts.push('<circle class="node-pulse" cx="'+cam.x+'" cy="'+cam.y+'" r="5" fill="none" stroke="'+color+'" stroke-width="1.6"/>');
-      }
-      if (selected){
-        parts.push('<circle cx="'+cam.x+'" cy="'+cam.y+'" r="10" fill="none" stroke="'+color+'" stroke-width="1" opacity="0.5"/>');
-      }
+      if (cam.status === "alert") parts.push('<circle class="node-pulse" cx="'+cam.x+'" cy="'+cam.y+'" r="5" fill="none" stroke="'+color+'" stroke-width="1.6"/>');
+      if (selected) parts.push('<circle cx="'+cam.x+'" cy="'+cam.y+'" r="10" fill="none" stroke="'+color+'" stroke-width="1" opacity="0.5"/>');
       parts.push('<circle cx="'+cam.x+'" cy="'+cam.y+'" r="14" fill="transparent"/>');
-      parts.push('<circle cx="'+cam.x+'" cy="'+cam.y+'" r="'+(cam.status==="offline"?3.6:4.4)+'" fill="'+color+'"'+(cam.status==="offline"?' fill-opacity="0.5"':'')+'/>');
+      if (cam.status === "alert"){
+        parts.push('<polygon points="'+cam.x+',' +(cam.y-5)+ ' '+(cam.x+5)+','+(cam.y+4)+' '+(cam.x-5)+','+(cam.y+4)+'" fill="'+color+'"/>');
+      } else {
+        parts.push('<circle cx="'+cam.x+'" cy="'+cam.y+'" r="'+(cam.status==="offline"?3.6:4.4)+'" fill="'+color+'"'+(cam.status==="offline"?' fill-opacity="0.5"':'')+'/>');
+      }
       parts.push('<text class="node-label" x="'+(cam.x+9)+'" y="'+(cam.y+3.5)+'">'+cam.id+'</text>');
       parts.push('</g>');
     });
-
     svg.innerHTML = parts.join("");
   }
 
@@ -1956,33 +575,19 @@
   function renderDetailStrip(){
     var strip = byId("detailStrip");
     var cam = state.selectedCameraId ? cameraById(state.selectedCameraId) : null;
-    if (!cam){
-      strip.innerHTML = '<div class="empty">Select a camera on the map or from the list to view its status.</div>';
-      return;
-    }
-    var isWebcam = cam.type === "webcam";
+    if (!cam){ strip.innerHTML = '<div class="empty">Select a camera on the map or from the list to view its status.</div>'; return; }
     var recentAlerts = state.alerts.filter(function(a){ return a.cameraId === cam.id; }).length;
-    var streamVal = isWebcam ? "Local browser device (getUserMedia)" : ("rtsp://10.4."+cam.id.slice(-2)+".11:554/live");
-
-    var actionsHtml;
-    if (isWebcam){
-      var running = !!webcamState.stream;
-      actionsHtml =
-        '<button class="btn" data-action="webcam-start" '+(running?'disabled':'')+'>Start camera</button>'+
-        '<button class="btn" data-action="webcam-stop" '+(running?'':'disabled')+'>Stop camera</button>'+
-        '<button class="btn" data-action="webcam-reconnect">Reconnect camera</button>'+
-        '<button class="btn" data-action="webcam-remove">Remove camera</button>';
-    } else {
-      actionsHtml = (cam.status === "offline"
-        ? '<button class="btn" data-action="ping" data-cam="'+cam.id+'">Attempt reconnect</button>'
-        : '<button class="btn" data-action="mark-offline" data-cam="'+cam.id+'">Simulate feed loss</button>');
-    }
+    var snoozeActive = isSnoozed(cam.id);
+    var actionsHtml = (cam.status === "offline"
+      ? '<button class="btn" data-action="ping" data-cam="'+cam.id+'">Attempt reconnect</button>'
+      : '<button class="btn" data-action="mark-offline" data-cam="'+cam.id+'">Simulate feed loss</button>')+
+      '<button class="btn" data-action="'+(snoozeActive?'unsnooze':'snooze')+'" data-cam="'+cam.id+'">'+(snoozeActive?'Cancel snooze':'Snooze 15 min')+'</button>';
 
     strip.innerHTML =
       '<div class="d-field"><label>Camera</label><div class="val">'+cam.name+'</div></div>'+
       '<div class="d-field"><label>Sector</label><div class="val">'+cam.sector+'</div></div>'+
-      '<div class="d-field"><label>Status</label><div class="val"><span class="pill '+cam.status+'">'+cam.status+'</span></div></div>'+
-      '<div class="d-field"><label>Stream</label><div class="val mono">'+streamVal+'</div></div>'+
+      '<div class="d-field"><label>Status</label><div class="val"><span class="pill '+cam.status+'">'+cam.status+(snoozeActive?' · snoozed':'')+'</span></div></div>'+
+      '<div class="d-field"><label>Stream</label><div class="val mono">rtsp://10.4.'+cam.id.slice(-2)+'.11:554/live</div></div>'+
       '<div class="d-field"><label>Logged events</label><div class="val">'+recentAlerts+'</div></div>'+
       '<div class="d-actions">'+actionsHtml+'</div>';
   }
@@ -1998,140 +603,155 @@
     byId("statAvg").textContent = avg;
   }
 
+  function matchesSevFilter(a){ return state.sevFilter === "all" || a.severity === state.sevFilter; }
+
+  function alertItemHtml(a){
+    var cam = cameraById(a.cameraId);
+    var ackClass = a.acknowledged ? " ack" : "";
+    var selClass = a.id === state.selectedAlertId ? " selected" : "";
+    var newClass = a.id === state.lastNewAlertId ? " is-new" : "";
+    var checked = state.selectedAlertIds[a.id] ? " checked" : "";
+    return '<div class="alert-item sev-'+a.severity+ackClass+selClass+newClass+'" data-alert="'+a.id+'" tabindex="0" role="button" aria-label="'+a.type+' at '+(cam?cam.name:a.cameraId)+', severity '+a.severity+', '+(a.acknowledged?'acknowledged':'unacknowledged')+'">'+
+      (a.acknowledged ? '' : '<input type="checkbox" class="alert-check" data-check-alert="'+a.id+'"'+checked+' aria-label="Select alert '+a.id+'">')+
+      '<div class="alert-main">'+
+        '<div class="alert-top"><span class="sev-badge '+a.severity+'">'+a.severity+'</span><span class="alert-time">'+fmtTime(a.ts)+'</span></div>'+
+        '<div class="alert-type">'+a.type+'</div>'+
+        '<div class="alert-meta">'+(cam?cam.name:a.cameraId)+'</div>'+
+        '<div class="alert-score"><div class="score-bar"><div class="score-fill" style="width:'+a.score+'%; background:'+scoreColor(a.score)+';"></div></div><div class="score-num">'+a.score+'</div></div>'+
+        '<div class="alert-actions">'+(a.acknowledged ? '' : '<button class="btn small" data-action="quick-ack" data-alert="'+a.id+'">Acknowledge</button>')+'</div>'+
+      '</div>'+
+    '</div>';
+  }
+
   function renderAlertFeed(){
     var feed = byId("alertFeed");
-    if (state.alerts.length === 0){
+    var visible = state.alerts.filter(matchesSevFilter);
+    if (visible.length === 0){
       feed.innerHTML = '<div class="empty-feed">No alerts yet. New activity will appear here automatically.</div>';
+      updateBulkBar();
       return;
     }
-    var html = state.alerts.map(function(a){
+    var groups = buildGroups(visible);
+    var html = groups.map(function(members){
+      if (members.length === 1) return alertItemHtml(members[0]);
+      var a = members[0];
       var cam = cameraById(a.cameraId);
-      var ackClass = a.acknowledged ? " ack" : "";
-      var selClass = a.id === state.selectedAlertId ? " selected" : "";
-      var newClass = a.id === state.lastNewAlertId ? " is-new" : "";
-      var thumb = (a.evidence && a.evidence.frames && a.evidence.frames.length)
-        ? a.evidence.frames[a.evidence.frames.length-1] : null;
-      return '<div class="alert-item'+ackClass+selClass+newClass+'" data-alert="'+a.id+'" tabindex="0" role="button" aria-label="'+a.type+' at '+(cam?cam.name:a.cameraId)+', severity '+a.severity+', '+(a.acknowledged?'acknowledged':'unacknowledged')+'">'+
-        '<div class="alert-top">'+
-          '<span class="sev-badge '+a.severity+'">'+a.severity+'</span>'+
-          '<span class="alert-time">'+fmtTime(a.ts)+'</span>'+
+      var key = a.type + "|" + alertSector(a);
+      var open = !!state.openGroups[key];
+      var unackInGroup = members.filter(function(m){ return !m.acknowledged; }).length;
+      return '<div class="group-row'+(open?' open':'')+'" data-group="'+key+'">'+
+        '<div class="group-head" tabindex="0" role="button" aria-expanded="'+open+'" data-toggle-group="'+key+'">'+
+          '<span class="group-chevron">&#9656;</span>'+
+          '<span class="group-title">'+members.length+' &times; '+a.type+' — '+alertSector(a)+'</span>'+
+          '<span class="group-count">'+unackInGroup+' open</span>'+
         '</div>'+
-        '<div class="alert-type">'+a.type+'</div>'+
-        '<div class="alert-meta">'+(cam ? cam.name : a.cameraId)+'</div>'+
-        '<div class="alert-score">'+
-          '<div class="score-bar"><div class="score-fill" style="width:'+a.score+'%; background:'+scoreColor(a.score)+';"></div></div>'+
-          '<div class="score-num">'+a.score+'</div>'+
-        '</div>'+
-        (thumb ? '<img class="alert-thumb" src="'+thumb+'" alt="Saved evidence for '+a.id+'">' : '')+
-        '<div class="alert-actions">'+
-          (a.acknowledged
-            ? ''
-            : '<button class="btn small" data-action="quick-ack" data-alert="'+a.id+'">Acknowledge</button>')+
-        '</div>'+
+        '<div class="group-children">'+members.map(alertItemHtml).join("")+'</div>'+
       '</div>';
     }).join("");
     feed.innerHTML = html;
+    updateBulkBar();
+  }
+
+  function updateBulkBar(){
+    var ids = Object.keys(state.selectedAlertIds).filter(function(id){ return state.selectedAlertIds[id]; });
+    byId("bulkLabel").textContent = ids.length + " selected";
+    byId("bulkAckBtn").disabled = ids.length === 0;
   }
 
   function acknowledgeAlert(alertId, opts){
     var a = state.alerts.find(function(x){ return x.id === alertId; });
     if (!a || a.acknowledged) return;
     a.acknowledged = true;
+    delete state.selectedAlertIds[alertId];
     renderAll();
     if (!opts || !opts.silent) showToast("Alert " + a.id + " acknowledged.");
+  }
+
+  function acknowledgeSelected(){
+    var ids = Object.keys(state.selectedAlertIds).filter(function(id){ return state.selectedAlertIds[id]; });
+    ids.forEach(function(id){ var a = state.alerts.find(function(x){ return x.id===id; }); if (a) a.acknowledged = true; });
+    state.selectedAlertIds = {};
+    renderAll();
+    if (ids.length) showToast(ids.length + " alert" + (ids.length===1?"":"s") + " acknowledged.");
   }
 
   /* ============ CASE VIEW ============ */
 
   function openCaseView(alertId){
-    var alertObj = state.alerts.find(function(a){ return a.id === alertId; });
-    if (!alertObj) return;
+    var a = state.alerts.find(function(x){ return x.id === alertId; });
+    if (!a) return;
     state.selectedAlertId = alertId;
-    var cam = cameraById(alertObj.cameraId);
-
+    var cam = cameraById(a.cameraId);
     var windowMs = 5*60*1000;
-    var linked = state.alerts.filter(function(a){
-      if (a.id === alertObj.id) return false;
-      var c2 = cameraById(a.cameraId);
-      var sameSector = c2 && cam && c2.sector === cam.sector;
-      var close = Math.abs(a.ts - alertObj.ts) <= windowMs;
-      return sameSector && close;
+    var linked = state.alerts.filter(function(x){
+      if (x.id === a.id) return false;
+      var c2 = cameraById(x.cameraId);
+      return c2 && cam && c2.sector === cam.sector && Math.abs(x.ts - a.ts) <= windowMs;
     }).slice(0,4);
-
-    clearInterval(window.__evidenceTimer);
 
     var panel = byId("casePanel");
     panel.style.display = "flex";
     panel.innerHTML =
-      '<div class="case-head">'+
-        '<button class="back-btn" id="caseBack" aria-label="Back to alert feed">&larr;</button>'+
-        '<div class="case-title">Case '+alertObj.id+'</div>'+
-      '</div>'+
+      '<div class="case-head"><button class="back-btn" id="caseBack" aria-label="Back to alert feed">&larr;</button><div class="case-title">Case '+a.id+'</div></div>'+
       '<div class="case-body">'+
-        '<div class="case-section">'+
-          '<h4>Primary event</h4>'+
-          '<div class="alert-type" style="margin-top:0;">'+alertObj.type+'</div>'+
-          '<div class="alert-meta" style="margin-top:4px;">'+(cam?cam.name:alertObj.cameraId)+' &middot; '+fmtTime(alertObj.ts)+'</div>'+
-          '<div class="alert-score"><div class="score-bar"><div class="score-fill" style="width:'+alertObj.score+'%; background:'+scoreColor(alertObj.score)+';"></div></div><div class="score-num">'+alertObj.score+'</div></div>'+
+        '<div class="case-section"><h4>Primary event</h4>'+
+          '<div class="alert-type" style="margin-top:0;">'+a.type+'</div>'+
+          '<div class="alert-meta" style="margin-top:4px;">'+(cam?cam.name:a.cameraId)+' &middot; '+fmtTime(a.ts)+'</div>'+
+          '<div class="alert-score"><div class="score-bar"><div class="score-fill" style="width:'+a.score+'%; background:'+scoreColor(a.score)+';"></div></div><div class="score-num">'+a.score+'</div></div>'+
         '</div>'+
-        '<div class="case-section">'+
-          '<h4>Recorded evidence</h4>'+
-          (alertObj.evidence && alertObj.evidence.frames && alertObj.evidence.frames.length
-            ? '<img id="evidenceImg" class="evidence-img" src="'+alertObj.evidence.frames[0]+'" alt="Recorded evidence for '+alertObj.id+'">'+
-              '<div class="alert-meta" style="margin-top:6px;">'+alertObj.evidence.frames.length+' frames saved automatically around '+fmtTime(alertObj.evidence.capturedAt)+' &middot; '+(cam && cam.type === "webcam" ? "live webcam capture, retained with this case" : "simulated feed, retained with this case")+'</div>'
-            : '<div class="alert-meta">No evidence was saved for this event.</div>')+
+        '<div class="case-section"><h4>Linked events'+(cam?' ('+cam.sector+')':'')+'</h4>'+
+          (linked.length ? linked.map(function(x){
+            var c2 = cameraById(x.cameraId);
+            return '<div class="linked-event"><div class="linked-dot"></div><div class="linked-body"><div class="lt">'+x.type+'</div><div class="ls">'+(c2?c2.name:x.cameraId)+' &middot; '+fmtTime(x.ts)+'</div></div></div>';
+          }).join("") : '<div class="alert-meta">No correlated events in this sector within the time window.</div>')+
         '</div>'+
-        '<div class="case-section">'+
-          '<h4>Linked events'+(cam ? ' (' + cam.sector + ')' : '')+'</h4>'+
-          (linked.length
-            ? linked.map(function(a){
-                var c2 = cameraById(a.cameraId);
-                return '<div class="linked-event"><div class="linked-dot"></div><div class="linked-body">'+
-                  '<div class="lt">'+a.type+'</div>'+
-                  '<div class="ls">'+(c2?c2.name:a.cameraId)+' &middot; '+fmtTime(a.ts)+'</div>'+
-                '</div></div>';
-              }).join("")
-            : '<div class="alert-meta">No correlated events in this sector within the time window.</div>')+
-        '</div>'+
-        '<div class="case-section">'+
-          '<h4>Actions</h4>'+
+        '<div class="case-section"><h4>Actions</h4>'+
           '<div style="display:flex; gap:8px;">'+
-            '<button class="btn primary" id="ackBtn" '+(alertObj.acknowledged?'disabled':'')+'>'+(alertObj.acknowledged?'Acknowledged':'Acknowledge')+'</button>'+
+            '<button class="btn primary" id="ackBtn" '+(a.acknowledged?'disabled':'')+'>'+(a.acknowledged?'Acknowledged':'Acknowledge')+'</button>'+
             '<button class="btn" id="escalateBtn">Escalate to sector HQ</button>'+
           '</div>'+
         '</div>'+
       '</div>';
 
     byId("caseBack").addEventListener("click", closeCaseView);
-    byId("ackBtn").addEventListener("click", function(){
-      acknowledgeAlert(alertObj.id, { silent:true });
-      openCaseView(alertId);
-      showToast("Alert " + alertObj.id + " acknowledged.");
-    });
-    byId("escalateBtn").addEventListener("click", function(){
-      showToast("Case " + alertObj.id + " escalated to sector HQ.");
-    });
-
-    if (alertObj.evidence && alertObj.evidence.frames && alertObj.evidence.frames.length > 1){
-      var frames = alertObj.evidence.frames;
-      var idx = 0;
-      window.__evidenceTimer = setInterval(function(){
-        idx = (idx + 1) % frames.length;
-        var img = byId("evidenceImg");
-        if (img) img.src = frames[idx];
-      }, 380);
-    }
-
+    byId("ackBtn").addEventListener("click", function(){ acknowledgeAlert(a.id, {silent:true}); openCaseView(alertId); showToast("Alert "+a.id+" acknowledged."); });
+    byId("escalateBtn").addEventListener("click", function(){ openEscalateModal(a); });
     byId("caseBack").focus();
   }
 
   function closeCaseView(){
-    clearInterval(window.__evidenceTimer);
     state.selectedAlertId = null;
     byId("casePanel").style.display = "none";
     byId("casePanel").innerHTML = "";
     renderAlertFeed();
   }
+
+  /* ============ ESCALATE MODAL ============ */
+
+  function openEscalateModal(a){
+    var cam = cameraById(a.cameraId);
+    state.escalateTarget = a;
+    byId("escCase").textContent = a.id;
+    byId("escCam").textContent = cam ? cam.name : a.cameraId;
+    byId("escSector").textContent = cam ? cam.sector : "—";
+    byId("escTime").textContent = fmtTime(a.ts);
+    byId("escConfirm").style.display = "none";
+    byId("escSend").disabled = false;
+    byId("escalateModal").classList.remove("hidden");
+    byId("escSend").focus();
+  }
+  function closeEscalateModal(){ byId("escalateModal").classList.add("hidden"); state.escalateTarget = null; }
+
+  byId("escCancel").addEventListener("click", closeEscalateModal);
+  byId("escalateModal").addEventListener("click", function(e){ if (e.target === byId("escalateModal")) closeEscalateModal(); });
+  byId("escSend").addEventListener("click", function(){
+    var a = state.escalateTarget;
+    if (!a) return;
+    byId("escSend").disabled = true;
+    byId("escConfirm").style.display = "block";
+    byId("escConfirm").textContent = "Sent to Sector HQ at " + fmtTime(new Date()) + ". Case " + a.id + " is now flagged for follow-up.";
+    setTimeout(closeEscalateModal, 1400);
+  });
 
   /* ============ FULL RENDER ============ */
 
@@ -2139,7 +759,7 @@
     renderHeaderStats();
     renderFilterCounts();
     renderCameraList();
-    renderCenterView();
+    renderMap();
     renderDetailStrip();
     renderFeedStats();
     renderAlertFeed();
@@ -2147,210 +767,118 @@
 
   /* ============ EVENTS ============ */
 
-  byId("camSearch").addEventListener("input", function(e){
-    state.camSearch = e.target.value;
-    renderCameraList();
-  });
-
-  byId("camSearchClear").addEventListener("click", function(){
-    state.camSearch = "";
-    byId("camSearch").value = "";
-    byId("camSearch").focus();
-    renderCameraList();
-  });
+  byId("camSearch").addEventListener("input", function(e){ state.camSearch = e.target.value; renderCameraList(); });
+  byId("camSearchClear").addEventListener("click", function(){ state.camSearch=""; byId("camSearch").value=""; byId("camSearch").focus(); renderCameraList(); });
 
   byId("camFilters").addEventListener("click", function(e){
-    var btn = e.target.closest(".chip");
-    if (!btn) return;
+    var btn = e.target.closest(".chip"); if (!btn) return;
     state.camFilter = btn.getAttribute("data-filter");
     Array.prototype.forEach.call(byId("camFilters").querySelectorAll(".chip"), function(c){
-      var isActive = c === btn;
-      c.classList.toggle("active", isActive);
-      c.setAttribute("aria-pressed", isActive ? "true" : "false");
+      var a = c===btn; c.classList.toggle("active", a); c.setAttribute("aria-pressed", a?"true":"false");
     });
     renderCameraList();
   });
 
+  byId("sevFilters").addEventListener("click", function(e){
+    var btn = e.target.closest(".chip"); if (!btn) return;
+    state.sevFilter = btn.getAttribute("data-sev");
+    Array.prototype.forEach.call(byId("sevFilters").querySelectorAll(".chip"), function(c){
+      var a = c===btn; c.classList.toggle("active", a); c.setAttribute("aria-pressed", a?"true":"false");
+    });
+    renderAlertFeed();
+  });
+
   function selectCameraFromEl(el){
-    var camId = el.getAttribute("data-cam");
-    if (!camId) return;
+    var camId = el.getAttribute("data-cam"); if (!camId) return;
     state.selectedCameraId = camId;
-    state.mapView = "feed";
-    renderCameraList();
-    renderCenterView();
-    renderDetailStrip();
+    renderCameraList(); renderMap(); renderDetailStrip();
   }
-
-  byId("cameraList").addEventListener("click", function(e){
-    var row = e.target.closest(".cam-row");
-    if (!row) return;
-    selectCameraFromEl(row);
-  });
-  byId("cameraList").addEventListener("keydown", function(e){
-    var row = e.target.closest(".cam-row");
-    if (!row) return;
-    onActivateKey(e, function(){ selectCameraFromEl(row); });
-  });
-
-  byId("mapSvg").addEventListener("click", function(e){
-    var node = e.target.closest(".node");
-    if (!node) return;
-    selectCameraFromEl(node);
-  });
-  byId("mapSvg").addEventListener("keydown", function(e){
-    var node = e.target.closest(".node");
-    if (!node) return;
-    onActivateKey(e, function(){ selectCameraFromEl(node); });
-  });
-
-  byId("backToMapBtn").addEventListener("click", function(){
-    state.mapView = "map";
-    renderCenterView();
-  });
-
-  byId("drawZoneBtn").addEventListener("click", function(){
-    if (webcamZone.drawing) cancelZoneDrawing(); else startZoneDrawing();
-  });
-  byId("clearZoneBtn").addEventListener("click", function(){
-    webcamZone.points = [];
-    cancelZoneDrawing();
-    showToast("Restricted zone cleared.");
-  });
-  byId("aiOverlayCanvas").addEventListener("click", handleOverlayClick);
-  byId("aiOverlayCanvas").addEventListener("dblclick", function(e){
-    e.preventDefault();
-    finishZoneDrawing();
-  });
-  document.addEventListener("keydown", function(e){
-    if (e.key === "Escape" && webcamZone.drawing) cancelZoneDrawing();
-  });
+  byId("cameraList").addEventListener("click", function(e){ var row=e.target.closest(".cam-row"); if (row) selectCameraFromEl(row); });
+  byId("cameraList").addEventListener("keydown", function(e){ var row=e.target.closest(".cam-row"); if (row) onActivateKey(e, function(){ selectCameraFromEl(row); }); });
+  byId("mapSvg").addEventListener("click", function(e){ var node=e.target.closest(".node"); if (node) selectCameraFromEl(node); });
+  byId("mapSvg").addEventListener("keydown", function(e){ var node=e.target.closest(".node"); if (node) onActivateKey(e, function(){ selectCameraFromEl(node); }); });
 
   byId("fenceToggle").addEventListener("click", function(){
-    state.fenceOn = !state.fenceOn;
-    this.textContent = "Virtual fence: " + (state.fenceOn ? "on" : "off");
-    this.classList.toggle("active", state.fenceOn);
-    this.setAttribute("aria-pressed", state.fenceOn ? "true" : "false");
+    state.fenceOn = state.fenceOn === false ? true : false;
+    this.textContent = "Virtual fence: " + (state.fenceOn === false ? "off" : "on");
+    this.classList.toggle("active", state.fenceOn !== false);
+    this.setAttribute("aria-pressed", state.fenceOn !== false ? "true":"false");
     renderMap();
   });
 
-  byId("connectWebcamBtn").addEventListener("click", function(){
-    connectWebcam();
+  byId("focusModeBtn").addEventListener("click", function(){
+    state.focusMode = !state.focusMode;
+    byId("bodyGrid").classList.toggle("focus-mode", state.focusMode);
+    this.classList.toggle("active", state.focusMode);
+    this.setAttribute("aria-pressed", state.focusMode ? "true":"false");
+    this.textContent = state.focusMode ? "Exit focus" : "Focus map";
   });
 
   byId("detailStrip").addEventListener("click", function(e){
-    var btn = e.target.closest("button[data-action]");
-    if (!btn) return;
+    var btn = e.target.closest("button[data-action]"); if (!btn) return;
     var action = btn.getAttribute("data-action");
-
-    if (action === "webcam-start" || action === "webcam-reconnect"){
-      connectWebcam();
-      return;
-    }
-    if (action === "webcam-stop"){
-      stopWebcam();
-      return;
-    }
-    if (action === "webcam-remove"){
-      removeWebcamCamera();
-      return;
-    }
-
     var cam = cameraById(btn.getAttribute("data-cam"));
     if (!cam) return;
-    if (action === "mark-offline"){
-      cam.status = "offline";
-      showToast(cam.id + " feed lost — camera health alert raised.");
-    } else if (action === "ping"){
-      cam.status = "online";
-      showToast(cam.id + " reconnected.");
-    }
+    if (action === "mark-offline"){ cam.status="offline"; showToast(cam.id+" feed lost — camera health alert raised."); }
+    else if (action === "ping"){ cam.status="online"; showToast(cam.id+" reconnected."); }
+    else if (action === "snooze"){ snoozed[cam.id] = Date.now() + 15*60*1000; showToast(cam.id+" snoozed for 15 minutes."); }
+    else if (action === "unsnooze"){ delete snoozed[cam.id]; showToast(cam.id+" snooze cancelled."); }
     renderAll();
   });
 
   byId("alertFeed").addEventListener("click", function(e){
+    var toggle = e.target.closest("[data-toggle-group]");
+    if (toggle){ var k=toggle.getAttribute("data-toggle-group"); state.openGroups[k] = !state.openGroups[k]; renderAlertFeed(); return; }
+    var check = e.target.closest("[data-check-alert]");
+    if (check){ state.selectedAlertIds[check.getAttribute("data-check-alert")] = check.checked; updateBulkBar(); return; }
     var quickAck = e.target.closest("[data-action='quick-ack']");
-    if (quickAck){
-      e.stopPropagation();
-      acknowledgeAlert(quickAck.getAttribute("data-alert"));
-      return;
-    }
+    if (quickAck){ e.stopPropagation(); acknowledgeAlert(quickAck.getAttribute("data-alert")); return; }
     var item = e.target.closest(".alert-item");
-    if (!item) return;
-    openCaseView(item.getAttribute("data-alert"));
+    if (item) openCaseView(item.getAttribute("data-alert"));
   });
   byId("alertFeed").addEventListener("keydown", function(e){
+    var toggle = e.target.closest("[data-toggle-group]");
+    if (toggle){ onActivateKey(e, function(){ var k=toggle.getAttribute("data-toggle-group"); state.openGroups[k]=!state.openGroups[k]; renderAlertFeed(); }); return; }
     var item = e.target.closest(".alert-item");
-    if (!item) return;
-    onActivateKey(e, function(){ openCaseView(item.getAttribute("data-alert")); });
+    if (item) onActivateKey(e, function(){ openCaseView(item.getAttribute("data-alert")); });
   });
 
-  /* ============ SIMULATED LIVE FEED (fixed perimeter cameras) ============ */
+  byId("bulkAckBtn").addEventListener("click", acknowledgeSelected);
 
-  var alertSchedulerHandle = null;
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape" && !byId("escalateModal").classList.contains("hidden")) closeEscalateModal();
+  });
 
-  function scheduleNextAlert(){
-    var delay = randInt(5000, 11000);
-    alertSchedulerHandle = setTimeout(function(){
-      revertExpiredCameraAlerts();
-      var a = generateAlert();
-      if (a){
-        state.lastNewAlertId = a.id;
-        renderAll();
-        showToast("New alert: " + a.type + " — " + (cameraById(a.cameraId)||{}).name);
-        setTimeout(function(){
-          if (state.lastNewAlertId === a.id) state.lastNewAlertId = null;
-        }, 1700);
-      }
-      scheduleNextAlert();
-    }, delay);
-  }
-
-  var clockTickHandle = null;
+  /* ============ CLOCK / TICK ============ */
 
   function tick(){
     tickClock();
     revertExpiredCameraAlerts();
+    tickQueue();
     renderHeaderStats();
     renderFilterCounts();
-    if (state.mapView === "map") renderMap();
+    renderMap();
   }
 
   /* ============ INIT ============ */
 
-  var initialized = false;
-
   function init(){
-    if (initialized) return;
-    initialized = true;
-
     for (var i=0;i<3;i++){
-      var a = generateAlert();
-      if (a){
-        a.ts = new Date(Date.now() - randInt(20000, 240000));
-        a.evidence = captureEvidenceClip(a.cameraId, a.ts);
-      }
+      var a = generateAlertObject();
+      if (a){ a.ts = new Date(Date.now() - randInt(20000, 240000)); admitAlertSilently(a); }
     }
-    cameras.forEach(function(c){ if (c.status === "alert") c.status = "online"; });
-
+    cameras.forEach(function(c){ if (c.status === "alert") c.status = "online"; delete c._alertRevertAt; });
     renderAll();
     tickClock();
-    clockTickHandle = setInterval(tick, 1000);
+    setInterval(tick, 1000);
     scheduleNextAlert();
-    byId("connectWebcamBtn").classList.remove("hidden");
   }
 
-  window.__sentinelInit = init;
-  window.__sentinelStopWebcam = stopWebcam;
-  window.__sentinelRemoveWebcam = removeWebcamCamera;
-  window.__sentinelSetRole = function(r){
-    state.role = (r === "admin") ? "admin" : "viewer";
-    document.getElementById("bodyGrid").classList.toggle("viewer-mode", state.role !== "admin");
-    renderDetailStrip();
-    renderAll();
-  };
+  function admitAlertSilently(a){
+    state.alerts.unshift(a);
+  }
 
   init();
-
 })();
 </script>
 </body>
