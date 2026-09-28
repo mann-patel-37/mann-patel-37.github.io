@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sentinel Line — Operations Console (v2 demo)</title>
+<title>Sentinel Line — Operations Console (v3 demo)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -49,6 +49,7 @@
   .focus-btn:hover{ color:var(--text); border-color:var(--text-dim); }
   .focus-btn.active{ border-color:var(--teal); color:var(--teal); background:var(--teal-dim); }
 
+  .demo-badge{ font-size:11px; color:var(--amber); border:1px solid var(--amber); background:var(--amber-dim); border-radius:10px; padding:3px 10px; white-space:nowrap; }
   .nav-tabs{ display:flex; gap:6px; }
   .nav-tab{ background:transparent; border:1px solid var(--border); color:var(--text-dim); border-radius:4px; padding:6px 12px; font-size:12.5px; }
   .nav-tab:hover{ color:var(--text); border-color:var(--text-dim); }
@@ -271,18 +272,20 @@
       <span class="brand-name">Sentinel Line <span style="color:var(--text-dim); font-weight:400; font-size:12.5px;">— console v3</span></span>
     </div>
     <div class="nav-tabs" id="navTabs" role="tablist" aria-label="Console sections">
-      <button class="nav-tab active" data-view="ops" role="tab" aria-selected="true">Operations</button>
-      <button class="nav-tab" data-view="fleet" role="tab" aria-selected="false">Model &amp; Fleet</button>
+      <button class="nav-tab active" id="tabOps" data-view="ops" role="tab" aria-selected="true" aria-controls="opsView">Operations</button>
+      <button class="nav-tab" id="tabFleet" data-view="fleet" role="tab" aria-selected="false" aria-controls="fleetView">Model &amp; Fleet</button>
     </div>
     <div class="status-strip">
       <div class="status-item"><span class="dot" style="background:var(--teal);" aria-hidden="true"></span><span id="onlineCount">—</span> cameras online</div>
       <div class="status-item"><span class="dot" style="background:var(--amber);" aria-hidden="true"></span><span id="openAlertCount">—</span> open alerts</div>
+      <span class="demo-badge" title="All cameras, alerts and models on this page are simulated.">Demo &middot; simulated data</span>
       <div class="clock mono" id="clock">—</div>
+      <button class="focus-btn" id="resetDemoBtn" type="button">Reset demo</button>
       <button class="focus-btn" id="focusModeBtn" type="button" aria-pressed="false">Focus map</button>
     </div>
   </header>
 
-  <div class="view-panel" id="opsView">
+  <div class="view-panel" id="opsView" role="tabpanel" aria-labelledby="tabOps">
   <div class="body" id="bodyGrid">
     <div class="panel side" id="cameraPanel">
       <div class="panel-head"><h2>Cameras</h2></div>
@@ -307,7 +310,7 @@
           <button class="tbtn active" data-fence="1" id="fenceToggle" aria-pressed="true">Virtual fence: on</button>
         </div>
         <svg id="mapSvg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Perimeter map with camera positions"></svg>
-        <canvas id="feedCanvas" width="700" height="500" style="display:none; width:100%; height:100%;"></canvas>
+        <canvas id="feedCanvas" width="700" height="500" style="display:none; width:100%; height:100%; object-fit:contain;"></canvas>
         <div class="map-legend">
           <span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#4FA8A2"/></svg>Online</span>
           <span><svg width="10" height="10"><polygon points="5,0 10,9 0,9" fill="#D99A3E"/></svg>Active alert</span>
@@ -346,7 +349,7 @@
   </div>
   </div>
 
-  <div class="view-panel hidden" id="fleetView" style="display:flex; flex-direction:column; min-height:0;">
+  <div class="view-panel hidden" id="fleetView" role="tabpanel" aria-labelledby="tabFleet" style="display:flex; flex-direction:column; min-height:0;">
     <div class="fleet-wrap">
       <div class="fleet-grid">
         <div class="card">
@@ -1007,6 +1010,7 @@
   }
 
   function renderFleetView(){
+    saveState();
     if (state.activeView !== "fleet") return;
     byId("modelVersionLabel").textContent = "Model " + model.version;
     byId("modelLastTrained").textContent = model.lastTrained.toLocaleDateString(undefined,{month:"short",day:"2-digit"}) + " " + fmtTime(model.lastTrained);
@@ -1089,6 +1093,7 @@
   }
 
   byId("retrainBtn").addEventListener("click", retrainModel);
+  byId("resetDemoBtn").addEventListener("click", resetDemo);
 
   byId("navTabs").addEventListener("click", function(e){
     var btn = e.target.closest(".nav-tab"); if (!btn) return;
@@ -1101,6 +1106,50 @@
     if (state.activeView === "fleet") renderFleetView();
   });
 
+  /* ============ PERSISTENCE (localStorage, best-effort) ============ */
+
+  var STORE_KEY = "sentinelLineDemo.v3";
+
+  function saveState(){
+    try {
+      var snap = {
+        nextAlertId: state.nextAlertId,
+        alerts: state.alerts.map(function(a){ var c = Object.assign({}, a); c.ts = a.ts.getTime(); return c; }),
+        snoozed: snoozed,
+        model: {
+          version: model.version,
+          lastTrained: model.lastTrained.getTime(),
+          samplesThisCycle: model.samplesThisCycle,
+          feedback: model.feedback
+        }
+      };
+      window.localStorage.setItem(STORE_KEY, JSON.stringify(snap));
+    } catch (e){ /* storage unavailable — demo still works, just won't persist */ }
+  }
+
+  function loadState(){
+    try {
+      var raw = window.localStorage.getItem(STORE_KEY);
+      if (!raw) return false;
+      var snap = JSON.parse(raw);
+      state.nextAlertId = snap.nextAlertId || 1;
+      state.alerts = (snap.alerts || []).map(function(a){ a.ts = new Date(a.ts); return a; });
+      snoozed = snap.snoozed || {};
+      if (snap.model){
+        model.version = snap.model.version;
+        model.lastTrained = new Date(snap.model.lastTrained);
+        model.samplesThisCycle = snap.model.samplesThisCycle || 0;
+        model.feedback = snap.model.feedback || { real:0, false:0, unknown:0 };
+      }
+      return true;
+    } catch (e){ return false; }
+  }
+
+  function resetDemo(){
+    try { window.localStorage.removeItem(STORE_KEY); } catch (e){}
+    window.location.reload();
+  }
+
   /* ============ FULL RENDER ============ */
 
   function renderAll(){
@@ -1111,6 +1160,7 @@
     renderDetailStrip();
     renderFeedStats();
     renderAlertFeed();
+    saveState();
   }
 
   /* ============ EVENTS ============ */
@@ -1220,9 +1270,12 @@
   /* ============ INIT ============ */
 
   function init(){
-    for (var i=0;i<3;i++){
-      var a = generateAlertObject();
-      if (a){ a.ts = new Date(Date.now() - randInt(20000, 240000)); admitAlertSilently(a); }
+    var restored = loadState();
+    if (!restored){
+      for (var i=0;i<3;i++){
+        var a = generateAlertObject();
+        if (a){ a.ts = new Date(Date.now() - randInt(20000, 240000)); admitAlertSilently(a); }
+      }
     }
     cameras.forEach(function(c){ if (c.status === "alert") c.status = "online"; delete c._alertRevertAt; });
     renderAll();
